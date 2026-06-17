@@ -59,13 +59,26 @@
           <option value="2026-27">AY 2026-27 (CY 2025)</option>
         </select>
       </div>
+      <div>
+        <label class="block text-sm font-medium text-gray-600 mb-1">STC Treatment</label>
+        <select id="stcMode" class="border border-gray-300 rounded-lg p-2 text-sm text-gray-700">
+          <option value="gross">Gross shares + STC as sale proceeds (conservative)</option>
+          <option value="net">Net shares only — exclude STC (ClearTax view)</option>
+        </select>
+      </div>
       <button id="processBtn" onclick="processFile()"
         class="bg-blue-700 hover:bg-blue-800 text-white font-semibold px-5 py-2 rounded-lg text-sm transition">
         ▶ Calculate
       </button>
     </div>
+    <div class="mt-2 text-xs text-gray-500 bg-blue-50 border border-blue-200 rounded p-2">
+      💡 <strong>STC Treatment:</strong>
+      <em>Gross</em> — reports all vested shares + STC proceeds as "sale proceeds" (conservative, recommended).
+      <em>Net</em> — reports only shares received after STC, no sale proceeds (ClearTax view).
+      Consult your CA before choosing.
+    </div>
     <p class="text-xs text-gray-400 mt-2">
-      Upload the <em>Account Report</em> Excel from Shareworks — the "Share Holdings" sheet will be used.
+      Upload the <em>Account Report</em> Excel from Shareworks — the "Award Transactions" sheet will be used.
     </p>
   </div>
 
@@ -147,7 +160,7 @@ const TEAM_JSON_URL = 'https://raw.githubusercontent.com/arpanagr/itr-schedule-f
 
 // Cache keys
 const CACHE_SBI_KEY   = 'itr_sbi_rates_v1';
-const CACHE_TEAM_KEY  = 'itr_team_prices_v1';
+const CACHE_TEAM_KEY  = 'itr_team_prices_v2';
 const CACHE_TTL_MS    = 24 * 60 * 60 * 1000; // 24 hours
 
 // Global state
@@ -342,27 +355,28 @@ function getStockPrice(dateStr, type = 'close') {
 // PARSE SHAREWORKS EXCEL
 // ─────────────────────────────────────────────
 function parseShareworks(wb) {
-  // Try "Share Holdings" sheet, fallback to first sheet
-  const sheetName = wb.SheetNames.find(n => n.toLowerCase().includes('share hold') || n.toLowerCase().includes('holding'))
-                   || wb.SheetNames[0];
   // Validate this is a Shareworks file, not our output file
-  if (!sheetName || wb.SheetNames.join(',').toLowerCase().includes('fa_calculation') || wb.SheetNames.join(',').toLowerCase().includes('itr_entry')) {
+  if (wb.SheetNames.join(',').toLowerCase().includes('fa_calculation') || wb.SheetNames.join(',').toLowerCase().includes('itr_entry')) {
     throw new Error('❌ Wrong file uploaded! Please upload your Shareworks "Account Report" Excel file, not the ITR output file.');
   }
+
+  // PRIMARY: Use "Award Transactions" sheet — has full history including sold lots
+  // FALLBACK: Use "Share Holdings" sheet
+  const txnSheetName = wb.SheetNames.find(n => n.toLowerCase().includes('award trans') || n.toLowerCase().includes('transaction'));
+  const holdSheetName = wb.SheetNames.find(n => n.toLowerCase().includes('share hold') || n.toLowerCase().includes('holding'));
+  const sheetName = txnSheetName || holdSheetName || wb.SheetNames[0];
 
   log(`Parsing sheet: "${sheetName}"`);
   const ws = wb.Sheets[sheetName];
 
-  // Shareworks report has a title row (row 1 = "Share Holdings"), real headers in row 2
-  // Use header:1 to get raw arrays, then find the real header row
   const rawRows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
   log(`Found ${rawRows.length} rows in sheet`);
 
-  // Find the header row — it's the first row that contains "Acquisition Date" or "As Of Date"
+  // Find the header row
   let headerRowIdx = 0;
   for (let i = 0; i < Math.min(5, rawRows.length); i++) {
     const rowStr = rawRows[i].join('|').toLowerCase();
-    if (rowStr.includes('acquisition date') || rowStr.includes('as of date') || rowStr.includes('vest date')) {
+    if (rowStr.includes('release date') || rowStr.includes('acquisition date') || rowStr.includes('vest date') || rowStr.includes('shares vested')) {
       headerRowIdx = i;
       break;
     }
@@ -374,30 +388,36 @@ function parseShareworks(wb) {
   const rows = [];
   for (let i = headerRowIdx + 1; i < rawRows.length; i++) {
     const row = rawRows[i];
-    // Skip truly empty rows (all cells empty) and totals rows (no acquisition date)
     if (!row.some(v => v !== '' && v !== null && v !== undefined)) continue;
     const obj = {};
     headers.forEach((h, idx) => { if (h) obj[h] = row[idx]; });
-    // Skip totals/summary rows — they won't have an acquisition date
-    const acqVal = obj['acquisition date'] || obj['vest date'] || obj['release date'];
-    if (!acqVal) continue;
+    // Must have a release/vest date
+    const hasDate = obj['release date'] || obj['acquisition date'] || obj['vest date'];
+    if (!hasDate) continue;
     rows.push(obj);
   }
   log(`Data rows: ${rows.length}`);
 
   const lots = [];
+  // Award Transactions column names (primary) + Share Holdings (fallback)
   const keyMap = {
-    // Shareworks "Share Holdings" actual column names + common aliases
-    vestDate:   ['acquisition date', 'release date', 'vest date', 'vesting date', 'date released', 'date vested'],
-    qty:        ['total shares you hold', 'shares released', 'shares vested', 'quantity', 'qty', 'shares', 'net shares'],
-    fmv:        ['cost basis per share', 'fmv at release', 'fmv', 'fair market value', 'price at vest', 'release price', 'price'],
-    soldQty:    ['shares sold', 'sold shares', 'sell to cover shares', 'shares withheld', 'shares sold for tax'],
-    soldPrice:  ['sale price', 'sell price', 'sold price', 'price sold', 'current price per share'],
-    soldDate:   ['sale date', 'sell date', 'date sold', 'as of date'],
+    vestDate:   ['release date', 'acquisition date', 'vest date', 'vesting date', 'date released', 'date vested'],
+    qtyVested:  ['shares vested', 'shares released', 'quantity vested', 'shares granted'],
+    qtyHeld:    ['shares held', 'total shares you hold', 'net shares', 'shares remaining'],
+    fmv:        ['fair market value per share', 'fmv at release', 'fmv', 'cost basis per share', 'fair market value', 'price at vest', 'release price'],
+    stcQty:     ['shares sold-to-cover', 'shares sold to cover', 'sell to cover shares', 'shares withheld', 'shares sold for tax', 'shares sold'],
+    stcPrice:   ['sale price per share', 'sell price per share', 'sale price', 'sell price', 'sold price'],
+    stcDate:    ['sale date (sell-to-cover only)', 'sale date', 'sell date', 'date sold'],
   };
 
   function parseDate(val) {
     if (!val) return null;
+    // JavaScript Date object (SheetJS parses Excel dates as JS Date)
+    if (val instanceof Date) {
+      // Use UTC to avoid timezone shifts — add 12h to handle IST offset
+      const d = new Date(val.getTime() + 12 * 60 * 60 * 1000);
+      return d.toISOString().slice(0, 10);
+    }
     // Excel serial number (e.g. 45552)
     if (typeof val === 'number') {
       const d = new Date(Math.round((val - 25569) * 86400 * 1000));
@@ -407,6 +427,13 @@ function parseShareworks(wb) {
     if (!s || s === '0') return null;
     // "2024-08-18 00:00:00" or "2024-08-18T00:00:00"
     if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
+    // JS Date toString: "Sat Aug 17 2024 23:59:50 GMT+0530 (India Standard Time)"
+    const jsDate = new Date(s);
+    if (!isNaN(jsDate.getTime())) {
+      // Add 12h to handle timezone offset (e.g. IST -5:30 shifts Aug 18 to Aug 17)
+      const d = new Date(jsDate.getTime() + 12 * 60 * 60 * 1000);
+      return d.toISOString().slice(0, 10);
+    }
     // "08/18/2024"
     const m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
     if (m) return `${m[3]}-${m[1].padStart(2,'0')}-${m[2].padStart(2,'0')}`;
@@ -430,26 +457,39 @@ function parseShareworks(wb) {
 
   for (const row of rows) {
     const vestDateKey  = findKey(row, keyMap.vestDate);
-    const qtyKey       = findKey(row, keyMap.qty);
+    const qtyVestedKey = findKey(row, keyMap.qtyVested);
+    const qtyHeldKey   = findKey(row, keyMap.qtyHeld);
     const fmvKey       = findKey(row, keyMap.fmv);
-    const soldQtyKey   = findKey(row, keyMap.soldQty);
-    const soldPriceKey = findKey(row, keyMap.soldPrice);
-    const soldDateKey  = findKey(row, keyMap.soldDate);
+    const stcQtyKey    = findKey(row, keyMap.stcQty);
+    const stcPriceKey  = findKey(row, keyMap.stcPrice);
+    const stcDateKey   = findKey(row, keyMap.stcDate);
 
     const vestDateRaw = vestDateKey ? row[vestDateKey] : null;
     const vestDate    = parseDate(vestDateRaw);
     if (!vestDate) { log(`Skipping row — no valid vest date (raw: ${vestDateRaw})`); continue; }
 
-    const qty       = parseNum(qtyKey ? row[qtyKey] : null) || 0;
-    const fmv       = parseNum(fmvKey ? row[fmvKey] : null) || 0;
-    const soldQty   = parseNum(soldQtyKey ? row[soldQtyKey] : null) || 0;
-    const soldPrice = parseNum(soldPriceKey ? row[soldPriceKey] : null) || 0;
-    const soldDateRaw = soldDateKey ? row[soldDateKey] : null;
-    const soldDate  = parseDate(soldDateRaw) || vestDate;
+    const qtyVested = parseNum(qtyVestedKey ? row[qtyVestedKey] : null) || 0;
+    const qtyHeld   = parseNum(qtyHeldKey   ? row[qtyHeldKey]   : null) || 0;
+    const fmv       = parseNum(fmvKey       ? row[fmvKey]       : null) || 0;
+    const stcQty    = parseNum(stcQtyKey    ? row[stcQtyKey]    : null) || 0;
+    const stcPrice  = parseNum(stcPriceKey  ? row[stcPriceKey]  : null) || 0;
+    const stcDateRaw = stcDateKey ? row[stcDateKey] : null;
+    const stcDate   = parseDate(stcDateRaw) || vestDate;
 
+    // Use qtyVested as gross shares; qtyHeld as remaining (net of STC)
+    const qty = qtyVested || qtyHeld;
     if (qty <= 0) continue;
 
-    lots.push({ vestDate, qty, fmv, soldQty, soldPrice, soldDate });
+    lots.push({
+      vestDate,
+      qtyVested: qtyVested || qty,
+      qtyHeld,
+      qty,           // gross vested (for FA disclosure)
+      fmv,
+      stcQty,
+      stcPrice,
+      stcDate,
+    });
   }
 
   log(`Parsed ${lots.length} vesting lots`);
@@ -459,14 +499,13 @@ function parseShareworks(wb) {
 // ─────────────────────────────────────────────
 // CORE ITR FA A3 CALCULATION
 // ─────────────────────────────────────────────
-function computeFA3(lots, calendarYear) {
+function computeFA3(lots, calendarYear, stcMode = "gross") {
   const rows = [];
   let slNo = 1;
 
   for (const lot of lots) {
     const vy = parseInt(lot.vestDate.slice(0, 4));
-    // Only include if vest date is on or before Dec 31 of calendarYear
-    // AND the lot was ever held during calendarYear
+    // Include all lots vested on or before Dec 31 of calendarYear
     if (vy > calendarYear) continue;
 
     // Vesting FX rate (actual vesting date)
@@ -480,45 +519,55 @@ function computeFA3(lots, calendarYear) {
       log(`  Lot ${lot.vestDate}: FMV not in report, using stock price $${fmvUsd}`, 'warn');
     }
 
-    // Initial value = qty × FMV × vest FX rate
-    const initialValueInr = lot.qty * fmvUsd * vestFx.rate;
+    // STC mode: gross = all vested shares, net = only shares received (qtyHeld)
+    const reportQty = (stcMode === 'net' && lot.qtyHeld > 0) ? lot.qtyHeld : lot.qty;
 
-    // Peak value: max of (peak price in CY) × qty held at that point × peak-date FX rate
-    // Qty held at peak = total vested qty (incl STC shares, gross)
+    // Initial value = reportQty × FMV × vest FX rate
+    const initialValueInr = reportQty * fmvUsd * vestFx.rate;
+
+    // Qty held at start of CY (for peak calculation)
+    const qtyAtPeak = lot.qtyHeld > 0 ? lot.qtyHeld : reportQty;
+
+    // Peak value: peak price in CY × qty held × peak-date FX rate
     const peakStock = getStockPrice(`${calendarYear}-01-01`, 'peak');
     const peakFx    = getFxRate(peakStock.date || `${calendarYear}-12-31`, 'vesting');
-    const qtyAtPeak = lot.qty; // gross vested shares for FA disclosure
     const peakValueInr = peakStock.price ? qtyAtPeak * peakStock.price * peakFx.rate : 0;
 
     // Closing value (Dec 31 or last trading day of CY)
     const dec31Stock = getStockPrice(`${calendarYear}-12-31`, 'dec31');
     const dec31Fx    = getFxRate(`${calendarYear}-12-31`, 'vesting');
-    const netHeld    = lot.qty - lot.soldQty; // shares still held at Dec 31
+    // Shares still held at Dec 31 = qtyHeld (from report) for current CY lots
+    // For prior year lots: qtyHeld already accounts for all previous STC
+    const netHeld = lot.qtyHeld > 0 ? lot.qtyHeld : Math.max(0, lot.qty - lot.stcQty);
     const closingValueInr = (dec31Stock.price && netHeld > 0)
       ? netHeld * dec31Stock.price * dec31Fx.rate : 0;
 
-    // Gross amount paid/credited = vesting perquisite value (same as initial value — already in salary)
+    // Gross amount paid/credited = vesting perquisite value (same as initial value — in Form 16/salary)
     const grossPaidInr = initialValueInr;
 
-    // Sale proceeds (sell-to-cover + any other sales in CY)
+    // Sale proceeds (sell-to-cover only — per Award Transactions)
+    // In 'net' mode: STC shares not reported → no sale proceeds either
     let saleProceedsInr = 0;
     let saleProceedsUsd = 0;
-    if (lot.soldQty > 0 && lot.soldPrice > 0) {
-      const saleFx = getFxRate(lot.soldDate, 'sale'); // preceding month-end per Rule 115
-      saleProceedsUsd = lot.soldQty * lot.soldPrice;
+    if (stcMode === 'gross' && lot.stcQty > 0 && lot.stcPrice > 0) {
+      const saleFx = getFxRate(lot.stcDate, 'sale'); // preceding month-end per Rule 115
+      saleProceedsUsd = lot.stcQty * lot.stcPrice;
       saleProceedsInr = saleProceedsUsd * saleFx.rate;
     }
 
-    // Nature of income
-    const hasCapGain = lot.soldQty > 0;
-    const holdingMonths = lot.soldQty > 0
-      ? Math.round((new Date(lot.soldDate) - new Date(lot.vestDate)) / (1000 * 60 * 60 * 24 * 30))
+    // Nature of income — STC sale is on vesting date (same day), so it's salary/perquisite
+    // STC happens immediately at vesting — no holding period → treated as part of perquisite
+    const hasSTCSale = lot.stcQty > 0;
+    const holdingDays = hasSTCSale
+      ? Math.round((new Date(lot.stcDate) - new Date(lot.vestDate)) / (1000 * 60 * 60 * 24))
       : 0;
+    const holdingMonths = Math.round(holdingDays / 30);
+    // STC is same-day or next-day → 0 holding → always STCG (or perquisite)
     const isLTCG = holdingMonths >= 24;
-    const natureOfIncome = hasCapGain
-      ? (isLTCG ? 'Long Term Capital Gains' : 'Short Term Capital Gains')
+    const natureOfIncome = hasSTCSale
+      ? (isLTCG ? 'Long Term Capital Gains' : 'Short Term Capital Gains / Perquisite (STC)')
       : 'Salary / Perquisite';
-    const incomeSchedule = hasCapGain
+    const incomeSchedule = hasSTCSale
       ? (isLTCG ? 'Schedule CG (B9 - LTCG unlisted)' : 'Schedule CG (A5 - STCG other)')
       : 'Schedule Salary (Form 16)';
 
@@ -531,7 +580,8 @@ function computeFA3(lots, calendarYear) {
       zip: ENTITY.zip,
       nature: ENTITY.nature,
       dateAcquired: lot.vestDate,
-      qtyVested: lot.qty,
+      qtyVested: reportQty,
+      qtyHeld: lot.qtyHeld,
       qtyNet: netHeld,
       fmvUsd: fmvUsd.toFixed(2),
       vestFxRate: vestFx.rate.toFixed(2),
@@ -545,9 +595,9 @@ function computeFA3(lots, calendarYear) {
       dec31FxRate: dec31Fx.rate.toFixed(2),
       closingValueInr: Math.round(closingValueInr),
       grossPaidInr: Math.round(grossPaidInr),
-      soldQty: lot.soldQty,
-      soldPrice: lot.soldPrice,
-      soldDate: lot.soldDate,
+      stcQty: lot.stcQty,
+      stcPrice: lot.stcPrice,
+      stcDate: lot.stcDate,
       saleProceedsUsd: saleProceedsUsd.toFixed(2),
       saleProceedsInr: Math.round(saleProceedsInr),
       natureOfIncome,
@@ -619,13 +669,16 @@ function downloadExcel() {
     ['Generated by ITR FA A3 Tool', 'Date:', new Date().toLocaleDateString('en-IN')],
     [],
     ['Sl No', 'Country Name', 'Country Code', 'Name of Entity', 'Address', 'ZIP',
-     'Nature of Entity', 'Date of Acquiring (YYYY-MM-DD)', 'Initial Investment (₹)',
-     'Peak Value (₹)', 'Closing Value (₹)', 'Gross Amount Paid (₹)',
-     'Gross Sale Proceeds (₹)', 'Nature of Income', 'Income Schedule'],
+     'Nature of Entity', 'Nature of Interest / Ownership', 'Date of Acquiring (YYYY-MM-DD)',
+     'Initial Investment (₹)', 'Peak Value (₹)', 'Closing Value (₹)',
+     'Gross Amount Paid/Credited (₹)', 'Gross Sale Proceeds (₹)',
+     'Nature of Income', 'Income Schedule'],
     ...outputRows.map(r => [
       r.slNo, r.country, r.countryCode, r.name, r.address, r.zip, r.nature,
+      'Legal Owner',  // ITD: if both legal & beneficial owner, report as Legal Owner
       r.dateAcquired, r.initialValueInr, r.peakValueInr, r.closingValueInr,
-      r.grossPaidInr, r.saleProceedsInr, r.natureOfIncome, r.incomeSchedule,
+      0,  // Gross amount paid/credited — Atlassian pays no dividends
+      r.saleProceedsInr, r.natureOfIncome, r.incomeSchedule,
     ]),
   ];
 
@@ -636,21 +689,88 @@ function downloadExcel() {
     ['Sl No', 'Vest Date', 'Qty Vested', 'Net Held', 'FMV (USD)', 'Vest FX Rate',
      'Vest FX Date', 'Initial (₹)', 'Peak Price (USD)', 'Peak Date', 'Peak FX',
      'Peak Value (₹)', 'Dec31 Price', 'Dec31 FX', 'Closing (₹)',
-     'Sold Qty', 'Sale Price', 'Sale Date', 'Sale Proceeds (USD)', 'Sale FX Rate', 'Sale Proceeds (₹)',
+     'STC Qty', 'STC Price (USD)', 'STC Date', 'Sale Proceeds (USD)', 'Sale Proceeds (₹)',
      'Holding Months', 'Nature'],
     ...outputRows.map(r => [
       r.slNo, r.dateAcquired, r.qtyVested, r.qtyNet, r.fmvUsd, r.vestFxRate, r.vestFxDate,
       r.initialValueInr, r.peakPrice, r.peakDate, r.peakFxRate, r.peakValueInr,
       r.dec31Price, r.dec31FxRate, r.closingValueInr,
-      r.soldQty, r.soldPrice, r.soldDate, r.saleProceedsUsd, 0, r.saleProceedsInr,
+      r.stcQty, r.stcPrice, r.stcDate, r.saleProceedsUsd, r.saleProceedsInr,
       r.holdingMonths, r.natureOfIncome,
     ]),
     [],
     ['DISCLAIMER: This output is for validation purposes only. Consult a qualified CA before filing.'],
   ];
 
+  // Compute Table A2 aggregate values from A3 output rows
+  const totalInitialInr    = outputRows.reduce((s, r) => s + (r.initialValueInr  || 0), 0);
+  const totalPeakInr       = outputRows.reduce((s, r) => s + (r.peakValueInr     || 0), 0);
+  const totalClosingInr    = outputRows.reduce((s, r) => s + (r.closingValueInr  || 0), 0);
+  const totalSaleProcInr   = outputRows.reduce((s, r) => s + (r.saleProceedsInr  || 0), 0);
+  const totalInitialUsd    = outputRows.reduce((s, r) => s + ((r.qtyVested || 0) * (r.fmvUsd || 0)), 0);
+  const totalClosingUsd    = outputRows.reduce((s, r) => s + ((r.qtyNet   || 0) * (r.dec31Price || 0)), 0);
+
+  // Sheet 3: Table A2 — Foreign Custodian Account (per ITD official document)
+  const a2Data = [
+    ['Schedule FA – Table A2: Foreign Custodian Account'],
+    ['As per ITD official document: Accounts maintained with foreign custodians must be reported in Table A2'],
+    ['Values below are auto-computed from your uploaded Shareworks report + SBI TT rates'],
+    [],
+    ['Field', 'Value (auto-computed)', 'Notes'],
+    ['Country Name', 'United States', ''],
+    ['Country Code', 'US', 'ISD Code for USA'],
+    ['Name of Institution', 'Morgan Stanley Smith Barney LLC', 'Shareworks custodian — verify on your statement'],
+    ['Address', '2000 Westchester Avenue, Purchase, NY 10577', 'Verify on your equity plan statement'],
+    ['ZIP Code', '10577', 'Verify on your equity plan statement'],
+    ['Account Number', '(Enter your Shareworks account number)', 'Found on your annual equity plan statement'],
+    ['Account Opening Date', '(Date your equity plan account was opened)', 'Found on your grant letter or first vesting statement'],
+    ['Status', 'Active', ''],
+    [],
+    ['=== COMPUTED FROM UPLOADED SHAREWORKS REPORT ===', '', ''],
+    ['Opening/Initial Value (USD)', totalInitialUsd.toFixed(2), 'Sum of (shares vested × FMV on vesting date) for all lots vested up to CY ' + calendarYear],
+    ['Opening/Initial Value (₹)', Math.round(totalInitialInr), 'Converted using SBI TTBR on respective vesting dates'],
+    ['Peak Value (₹)', Math.round(totalPeakInr), 'Sum of peak values of all lots — computed from team_prices.json + SBI TTBR'],
+    ['Closing Balance (USD)', totalClosingUsd.toFixed(2), 'Sum of (net shares held × Dec 31 price) for all lots'],
+    ['Closing Balance (₹)', Math.round(totalClosingInr), 'Converted using SBI TTBR on Dec 31, ' + calendarYear],
+    ['Gross Interest Paid/Credited (₹)', 0, 'Equity plan accounts earn no interest'],
+    ['Gross Dividend Paid/Credited (₹)', 0, 'Atlassian Corporation does not pay dividends'],
+    ['Gross Proceeds from Sale (₹)', Math.round(totalSaleProcInr), 'Sum of STC proceeds for all lots in CY ' + calendarYear],
+    [],
+    ['⚠️ NOTE: Verify all values above against your Shareworks annual statement before filing.'],
+    ['The ITR portal requires both Table A2 (custodian account) AND Table A3 (shares) to be filled.'],
+    ['Filling only A3 and missing A2 is a common filing error per official ITD guidance.'],
+  ];
+
+  // Sheet 4: Compliance Notes (per official ITD document only)
+  const notesData = [
+    ['Schedule FA Compliance Notes — Based on Official ITD Document Only'],
+    ['Source: https://www.incometax.gov.in/iec/foportal/sites/default/files/2024-11/Enhancing%20Tax%20Transparency%20on%20Foreign%20Assets%20and%20Income.pdf'],
+    [],
+    ['REQUIREMENT', 'STATUS', 'ACTION REQUIRED'],
+    ['ITR Form: Use ITR-2 or ITR-3 (not ITR-1/4)', '⚠️ User action required', 'Ensure you file ITR-2 or ITR-3'],
+    ['Table A2: Foreign Custodian Account', '⚠️ Manual entry required', 'Fill Table A2 in ITR portal using A2 sheet in this workbook'],
+    ['Table A3: Foreign Equity (RSU shares)', '✅ Generated by this tool', 'Use values from ITR Entry sheet'],
+    ['Ownership: Legal Owner (if both legal + beneficial)', '✅ Set to Legal Owner', 'Confirmed per ITD document Section 5'],
+    ['Exchange Rate: SBI TT Buy Rate', '✅ Used throughout', 'Per Rule 115, ITD document Section 6'],
+    ['Calendar Year Jan 1 – Dec 31 (not FY Apr-Mar)', '✅ Correct', 'AY 2025-26 covers CY Jan-Dec 2024'],
+    ['Initial Value: FX on date of investment/vesting', '✅ Correct', 'Vesting date FX used'],
+    ['Peak Value: FX on date of peak balance', '✅ Correct', 'Peak date FX used'],
+    ['Closing Value: FX on Dec 31', '✅ Correct', 'Dec 31 FX used'],
+    ['Proceeds from sale/redemption', '✅ Included', 'STC proceeds included in sale proceeds field'],
+    ['Gross amount paid/credited (dividends)', '✅ Set to ₹0', 'Atlassian does not pay dividends'],
+    ['Schedule AL: Also report in Schedule AL if applicable', '⚠️ User action required', 'Report foreign assets in Schedule AL if total assets > ₹50L'],
+    ['Schedule FSI: Report foreign income', '⚠️ User action required', 'RSU vesting income (perquisite) goes in Schedule FSI'],
+    ['Schedule TR + Form 67: Claim foreign tax credit', '⚠️ User action required', 'File Form 67 BEFORE submitting ITR if tax was withheld abroad'],
+    [],
+    ['⚠️ DISCLAIMER: This tool is for educational/validation purposes only.'],
+    ['Always consult a qualified Chartered Accountant before filing your ITR.'],
+    ['Developers and Atlassian assume no responsibility for tax filing accuracy or consequences.'],
+  ];
+
   const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(entryData), 'ITR_Entry');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(entryData), 'ITR_Entry_A3');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(a2Data),    'Table_A2_Custodian');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(notesData), 'Compliance_Notes');
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(auditData), 'Calculation_Audit');
 
   XLSX.writeFile(wb, `ITR_FA_A3_${ay}.xlsx`);
@@ -671,6 +791,8 @@ async function processFile() {
   usedStockPrices = {};
 
   const ay = document.getElementById('aySelect').value;
+  const stcMode = document.getElementById("stcMode").value;
+  log(`STC mode: ${stcMode === 'gross' ? 'Gross shares + STC proceeds' : 'Net shares only (exclude STC)'}`);
   const calendarYear = parseInt(ay.split('-')[0]) + 1 - 1;
 
   log(`═══ ITR Schedule FA A3 — AY ${ay} (CY ${calendarYear}) ═══`, 'head');
@@ -696,7 +818,7 @@ async function processFile() {
 
     // Compute
     log(`Computing FA A3 for CY ${calendarYear}...`, 'head');
-    outputRows = computeFA3(lots, calendarYear);
+    outputRows = computeFA3(lots, calendarYear, stcMode);
     log(`Generated ${outputRows.length} Schedule FA A3 rows`);
 
     // Render
