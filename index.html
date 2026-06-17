@@ -143,7 +143,7 @@ const ENTITY = {
 // URLs for data
 const SBI_CSV_URL  = 'https://raw.githubusercontent.com/sahilgupta/sbi-fx-ratekeeper/main/csv_files/SBI_REFERENCE_RATES_USD.csv';
 // team_prices.json served from GitHub Pages — use absolute URL
-const TEAM_JSON_URL = 'https://arpanagr.github.io/itr-schedule-fa/data/team_prices.json';
+const TEAM_JSON_URL = 'https://raw.githubusercontent.com/arpanagr/itr-schedule-fa/main/data/team_prices.json';
 
 // Cache keys
 const CACHE_SBI_KEY   = 'itr_sbi_rates_v1';
@@ -190,7 +190,13 @@ function cacheSet(key, data) {
 // ─────────────────────────────────────────────
 async function loadSbiRates() {
   const cached = cacheGet(CACHE_SBI_KEY);
-  if (cached) { sbiRates = cached; log(`SBI rates: loaded ${Object.keys(sbiRates).length} dates from cache`); return; }
+  if (cached && Object.keys(cached).length > 100) {
+    sbiRates = cached;
+    log(`SBI rates: loaded ${Object.keys(sbiRates).length} dates from cache`);
+    return;
+  }
+  // Clear stale/empty cache
+  localStorage.removeItem(CACHE_SBI_KEY);
 
   log('Fetching SBI TT Buy rates from GitHub...', 'head');
   const resp = await fetch(SBI_CSV_URL);
@@ -339,6 +345,11 @@ function parseShareworks(wb) {
   // Try "Share Holdings" sheet, fallback to first sheet
   const sheetName = wb.SheetNames.find(n => n.toLowerCase().includes('share hold') || n.toLowerCase().includes('holding'))
                    || wb.SheetNames[0];
+  // Validate this is a Shareworks file, not our output file
+  if (!sheetName || wb.SheetNames.join(',').toLowerCase().includes('fa_calculation') || wb.SheetNames.join(',').toLowerCase().includes('itr_entry')) {
+    throw new Error('❌ Wrong file uploaded! Please upload your Shareworks "Account Report" Excel file, not the ITR output file.');
+  }
+
   log(`Parsing sheet: "${sheetName}"`);
   const ws = wb.Sheets[sheetName];
 
@@ -385,6 +396,29 @@ function parseShareworks(wb) {
     soldDate:   ['sale date', 'sell date', 'date sold', 'as of date'],
   };
 
+  function parseDate(val) {
+    if (!val) return null;
+    // Excel serial number (e.g. 45552)
+    if (typeof val === 'number') {
+      const d = new Date(Math.round((val - 25569) * 86400 * 1000));
+      return d.toISOString().slice(0, 10);
+    }
+    const s = String(val).trim();
+    if (!s || s === '0') return null;
+    // "2024-08-18 00:00:00" or "2024-08-18T00:00:00"
+    if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
+    // "08/18/2024"
+    const m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+    if (m) return `${m[3]}-${m[1].padStart(2,'0')}-${m[2].padStart(2,'0')}`;
+    return null;
+  }
+
+  function parseNum(val) {
+    if (val === null || val === undefined || val === '') return null;
+    const n = parseFloat(String(val).replace(/[^0-9.-]/g, ''));
+    return isNaN(n) ? null : n;
+  }
+
   function findKey(row, aliases) {
     const rowKeys = Object.keys(row).map(k => k.toLowerCase().trim());
     for (const alias of aliases) {
@@ -403,15 +437,15 @@ function parseShareworks(wb) {
     const soldDateKey  = findKey(row, keyMap.soldDate);
 
     const vestDateRaw = vestDateKey ? row[vestDateKey] : null;
-    const vestDate    = parseDate(String(vestDateRaw || ''));
-    if (!vestDate) continue;
+    const vestDate    = parseDate(vestDateRaw);
+    if (!vestDate) { log(`Skipping row — no valid vest date (raw: ${vestDateRaw})`); continue; }
 
-    const qty      = parseFloat((qtyKey ? row[qtyKey] : '') || '0') || 0;
-    const fmv      = parseFloat((fmvKey ? row[fmvKey] : '') || '0') || 0;
-    const soldQty  = parseFloat((soldQtyKey ? row[soldQtyKey] : '') || '0') || 0;
-    const soldPrice = parseFloat((soldPriceKey ? row[soldPriceKey] : '') || '0') || 0;
+    const qty       = parseNum(qtyKey ? row[qtyKey] : null) || 0;
+    const fmv       = parseNum(fmvKey ? row[fmvKey] : null) || 0;
+    const soldQty   = parseNum(soldQtyKey ? row[soldQtyKey] : null) || 0;
+    const soldPrice = parseNum(soldPriceKey ? row[soldPriceKey] : null) || 0;
     const soldDateRaw = soldDateKey ? row[soldDateKey] : null;
-    const soldDate  = parseDate(String(soldDateRaw || '')) || vestDate;
+    const soldDate  = parseDate(soldDateRaw) || vestDate;
 
     if (qty <= 0) continue;
 
