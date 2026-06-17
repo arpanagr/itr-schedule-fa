@@ -1,0 +1,651 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ITR Schedule FA – Section A3 Tool</title>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    .log-entry { font-family: monospace; font-size: 12px; }
+    .spinner { border: 3px solid #f3f3f3; border-top: 3px solid #3b82f6; border-radius: 50%; width: 20px; height: 20px; animation: spin 0.8s linear infinite; display: inline-block; vertical-align: middle; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    table { border-collapse: collapse; width: 100%; }
+    th, td { border: 1px solid #d1d5db; padding: 6px 10px; font-size: 12px; }
+    th { background: #1e40af; color: white; }
+    tr:nth-child(even) td { background: #eff6ff; }
+  </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+
+<!-- HEADER -->
+<div class="bg-blue-800 text-white py-4 px-6 shadow-md">
+  <div class="max-w-6xl mx-auto flex items-center gap-3">
+    <div>
+      <h1 class="text-xl font-bold">🇮🇳 ITR Schedule FA – Section A3</h1>
+      <p class="text-blue-200 text-sm">Foreign Equity Disclosure Tool for Atlassian RSU holders</p>
+    </div>
+  </div>
+</div>
+
+<!-- DISCLAIMER -->
+<div class="max-w-6xl mx-auto mt-4 px-4">
+  <div class="bg-amber-50 border border-amber-300 rounded-lg p-3 text-sm text-amber-800">
+    ⚠️ <strong>DISCLAIMER:</strong> This tool is for educational and validation purposes only.
+    Always consult a qualified <strong>Chartered Accountant (CA)</strong> before filing.
+    Developers and Atlassian assume <strong>no liability</strong> for any tax filing consequences.
+  </div>
+</div>
+
+<!-- MAIN CONTENT -->
+<div class="max-w-6xl mx-auto mt-4 px-4 pb-10 space-y-5">
+
+  <!-- STEP 1: UPLOAD -->
+  <div class="bg-white rounded-xl shadow p-5">
+    <h2 class="text-lg font-semibold text-gray-800 mb-3">Step 1 — Upload Shareworks Report</h2>
+    <div class="flex flex-wrap gap-4 items-end">
+      <div>
+        <label class="block text-sm font-medium text-gray-600 mb-1">Shareworks Excel (.xlsx)</label>
+        <input type="file" id="fileInput" accept=".xlsx,.xls"
+          class="block w-full text-sm text-gray-700 border border-gray-300 rounded-lg p-2 cursor-pointer bg-gray-50" />
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-gray-600 mb-1">Filing Year (AY)</label>
+        <select id="aySelect" class="border border-gray-300 rounded-lg p-2 text-sm text-gray-700">
+          <option value="2022-23">AY 2022-23 (CY 2021)</option>
+          <option value="2023-24">AY 2023-24 (CY 2022)</option>
+          <option value="2024-25">AY 2024-25 (CY 2023)</option>
+          <option value="2025-26" selected>AY 2025-26 (CY 2024)</option>
+          <option value="2026-27">AY 2026-27 (CY 2025)</option>
+        </select>
+      </div>
+      <button id="processBtn" onclick="processFile()"
+        class="bg-blue-700 hover:bg-blue-800 text-white font-semibold px-5 py-2 rounded-lg text-sm transition">
+        ▶ Calculate
+      </button>
+    </div>
+    <p class="text-xs text-gray-400 mt-2">
+      Upload the <em>Account Report</em> Excel from Shareworks — the "Share Holdings" sheet will be used.
+    </p>
+  </div>
+
+  <!-- LOG -->
+  <div id="logBox" class="hidden bg-gray-900 text-green-400 rounded-xl p-4 text-xs font-mono max-h-48 overflow-y-auto"></div>
+
+  <!-- RESULTS TABLE -->
+  <div id="resultsSection" class="hidden bg-white rounded-xl shadow p-5">
+    <div class="flex justify-between items-center mb-3">
+      <h2 class="text-lg font-semibold text-gray-800">Schedule FA – Section A3 Output</h2>
+      <button onclick="downloadExcel()"
+        class="bg-green-600 hover:bg-green-700 text-white font-semibold px-4 py-2 rounded-lg text-sm">
+        ⬇ Download Excel
+      </button>
+    </div>
+    <div class="overflow-x-auto">
+      <table id="resultsTable">
+        <thead>
+          <tr>
+            <th>Sl No</th>
+            <th>Country</th>
+            <th>Name of Entity</th>
+            <th>Nature of Entity</th>
+            <th>Date of Acquiring</th>
+            <th>Initial Value (₹)</th>
+            <th>Peak Value (₹)</th>
+            <th>Closing Value (₹)</th>
+            <th>Gross Amount Paid (₹)</th>
+            <th>Gross Sale Proceeds (₹)</th>
+            <th>Nature of Income</th>
+            <th>Income Schedule</th>
+          </tr>
+        </thead>
+        <tbody id="resultsBody"></tbody>
+      </table>
+    </div>
+    <div id="calcDetails" class="mt-4 text-xs text-gray-500"></div>
+  </div>
+
+  <!-- RATES USED -->
+  <div id="ratesSection" class="hidden bg-white rounded-xl shadow p-5">
+    <h2 class="text-lg font-semibold text-gray-800 mb-3">📊 FX Rates &amp; Stock Prices Used</h2>
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div>
+        <h3 class="font-medium text-gray-700 mb-2 text-sm">SBI TT Buy Rates (USD/INR)</h3>
+        <div id="fxRatesList" class="text-xs font-mono space-y-1 text-gray-600 max-h-40 overflow-y-auto"></div>
+      </div>
+      <div>
+        <h3 class="font-medium text-gray-700 mb-2 text-sm">TEAM Stock Prices (USD)</h3>
+        <div id="stockPricesList" class="text-xs font-mono space-y-1 text-gray-600"></div>
+      </div>
+    </div>
+    <p class="text-xs text-gray-400 mt-3">
+      SBI TT rates sourced from <a href="https://github.com/sahilgupta/sbi-fx-ratekeeper" target="_blank" class="text-blue-500 underline">sbi-fx-ratekeeper</a> (GitHub).
+      Stock prices auto-refreshed monthly via Bitbucket Pipeline.
+      FX rates per <strong>Rule 115</strong>: last working day of preceding month for sale/income; vesting date for acquisition.
+    </p>
+  </div>
+
+</div>
+
+<script>
+// ─────────────────────────────────────────────
+// CONSTANTS
+// ─────────────────────────────────────────────
+const ENTITY = {
+  name:    'Atlassian Corporation',
+  address: '350 Bush Street, Floor 13, San Francisco CA 94104, United States',
+  zip:     '94104',
+  nature:  'Software Services',
+  country: 'United States',
+  countryCode: 'US',
+};
+
+// URLs for data
+const SBI_CSV_URL  = 'https://raw.githubusercontent.com/sahilgupta/sbi-fx-ratekeeper/main/csv_files/SBI_REFERENCE_RATES_USD.csv';
+// team_prices.json served from same origin (Bitbucket static site)
+const TEAM_JSON_URL = 'data/team_prices.json';
+
+// Cache keys
+const CACHE_SBI_KEY   = 'itr_sbi_rates_v1';
+const CACHE_TEAM_KEY  = 'itr_team_prices_v1';
+const CACHE_TTL_MS    = 24 * 60 * 60 * 1000; // 24 hours
+
+// Global state
+let sbiRates   = {};   // { 'YYYY-MM-DD': ttBuy }
+let teamPrices = {};   // { year: { peak_price, peak_date, dec31_close, daily_close } }
+let outputRows = [];   // computed FA A3 rows
+let usedFxRates = {};
+let usedStockPrices = {};
+
+// ─────────────────────────────────────────────
+// LOGGING
+// ─────────────────────────────────────────────
+function log(msg, type = 'info') {
+  const box = document.getElementById('logBox');
+  box.classList.remove('hidden');
+  const colors = { info: 'text-green-400', warn: 'text-yellow-300', error: 'text-red-400', head: 'text-cyan-300' };
+  const div = document.createElement('div');
+  div.className = `log-entry ${colors[type] || 'text-green-400'}`;
+  div.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+  box.appendChild(div);
+  box.scrollTop = box.scrollHeight;
+}
+
+// ─────────────────────────────────────────────
+// CACHE HELPERS
+// ─────────────────────────────────────────────
+function cacheGet(key) {
+  try {
+    const item = JSON.parse(localStorage.getItem(key));
+    if (item && Date.now() - item.ts < CACHE_TTL_MS) return item.data;
+  } catch {}
+  return null;
+}
+function cacheSet(key, data) {
+  try { localStorage.setItem(key, JSON.stringify({ ts: Date.now(), data })); } catch {}
+}
+
+// ─────────────────────────────────────────────
+// LOAD SBI TT RATES
+// ─────────────────────────────────────────────
+async function loadSbiRates() {
+  const cached = cacheGet(CACHE_SBI_KEY);
+  if (cached) { sbiRates = cached; log(`SBI rates: loaded ${Object.keys(sbiRates).length} dates from cache`); return; }
+
+  log('Fetching SBI TT Buy rates from GitHub...', 'head');
+  const resp = await fetch(SBI_CSV_URL);
+  const text = await resp.text();
+  const lines = text.trim().split('\n');
+  const header = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
+  const dateIdx = header.findIndex(h => h.toLowerCase().includes('date'));
+  const buyIdx  = header.findIndex(h => h.toLowerCase().includes('tt buy') || h.toLowerCase() === 'tt_buy');
+
+  sbiRates = {};
+  for (let i = 1; i < lines.length; i++) {
+    const cols = lines[i].split(',').map(c => c.trim().replace(/"/g, ''));
+    const rawDate = cols[dateIdx];
+    const rawBuy  = parseFloat(cols[buyIdx]);
+    if (!rawDate || isNaN(rawBuy)) continue;
+    // Normalise date to YYYY-MM-DD
+    const d = parseDate(rawDate);
+    if (d) sbiRates[d] = rawBuy;
+  }
+  cacheSet(CACHE_SBI_KEY, sbiRates);
+  log(`SBI rates: loaded ${Object.keys(sbiRates).length} dates (2020–present)`);
+}
+
+// ─────────────────────────────────────────────
+// LOAD TEAM PRICES
+// ─────────────────────────────────────────────
+async function loadTeamPrices() {
+  const cached = cacheGet(CACHE_TEAM_KEY);
+  if (cached) { teamPrices = cached; log(`TEAM prices: loaded from cache (generated ${cached._generated_on || 'unknown'})`); return; }
+
+  log('Fetching TEAM stock prices from data/team_prices.json...', 'head');
+  try {
+    const resp = await fetch(TEAM_JSON_URL + '?v=' + Date.now());
+    const json = await resp.json();
+    teamPrices = json.annual;
+    teamPrices._generated_on = json.generated_on;
+    cacheSet(CACHE_TEAM_KEY, teamPrices);
+    log(`TEAM prices: loaded CY${Object.keys(teamPrices).filter(k => !k.startsWith('_')).join(', CY')}`);
+  } catch (e) {
+    log('Could not load team_prices.json — using bundled fallback prices', 'warn');
+    // Fallback hardcoded (updated as of June 2026)
+    teamPrices = {
+      2019: { peak_price: 149.80, peak_date: '2019-07-26', dec31_close: 120.34, daily_close: {} },
+      2020: { peak_price: 250.03, peak_date: '2020-12-17', dec31_close: 233.87, daily_close: {} },
+      2021: { peak_price: 483.13, peak_date: '2021-10-29', dec31_close: 381.29, daily_close: {} },
+      2022: { peak_price: 380.63, peak_date: '2022-01-03', dec31_close: 128.68, daily_close: {} },
+      2023: { peak_price: 248.00, peak_date: '2023-12-22', dec31_close: 237.86, daily_close: {} },
+      2024: { peak_price: 287.97, peak_date: '2024-12-04', dec31_close: 243.38, daily_close: {} },
+      2025: { peak_price: 326.00, peak_date: '2025-02-10', dec31_close: 162.14, daily_close: {} },
+      2026: { peak_price: 163.92, peak_date: '2026-01-07', dec31_close: null,   daily_close: {} },
+    };
+  }
+}
+
+// ─────────────────────────────────────────────
+// DATE HELPERS
+// ─────────────────────────────────────────────
+function parseDate(str) {
+  if (!str) return null;
+  str = str.trim();
+  // Try DD-MM-YYYY
+  let m = str.match(/^(\d{1,2})-(\d{1,2})-(\d{4})$/);
+  if (m) return `${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`;
+  // Try MM/DD/YYYY
+  m = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (m) return `${m[3]}-${m[1].padStart(2,'0')}-${m[2].padStart(2,'0')}`;
+  // Already YYYY-MM-DD
+  if (/^\d{4}-\d{2}-\d{2}$/.test(str)) return str;
+  // Excel serial number
+  const n = parseInt(str);
+  if (!isNaN(n) && n > 40000) {
+    const d = new Date((n - 25569) * 86400 * 1000);
+    return d.toISOString().slice(0, 10);
+  }
+  return null;
+}
+
+function lastDayOfPrevMonth(dateStr) {
+  const [y, m] = dateStr.split('-').map(Number);
+  const d = new Date(y, m - 1, 0); // last day of prev month
+  return d.toISOString().slice(0, 10);
+}
+
+function prevWorkingDay(dateStr) {
+  const sorted = Object.keys(sbiRates).sort();
+  // Find closest rate on or before dateStr
+  let best = null;
+  for (const d of sorted) {
+    if (d <= dateStr) best = d;
+    else break;
+  }
+  return best;
+}
+
+// ─────────────────────────────────────────────
+// FX RATE LOOKUP (Rule 115)
+// ─────────────────────────────────────────────
+function getFxRate(dateStr, forType = 'vesting') {
+  let lookupDate = dateStr;
+  if (forType === 'sale' || forType === 'income') {
+    lookupDate = lastDayOfPrevMonth(dateStr);
+  }
+  const key = prevWorkingDay(lookupDate);
+  const rate = key ? sbiRates[key] : null;
+  if (key) usedFxRates[`${dateStr} (${forType} → ${key})`] = rate;
+  return { rate: rate || 84.0, date: key || lookupDate, isFallback: !rate };
+}
+
+// ─────────────────────────────────────────────
+// STOCK PRICE LOOKUP
+// ─────────────────────────────────────────────
+function getStockPrice(dateStr, type = 'close') {
+  const year = parseInt(dateStr.slice(0, 4));
+  const yd = teamPrices[String(year)] || teamPrices[year];
+  if (!yd) return { price: null, source: 'not found' };
+
+  if (type === 'peak') {
+    usedStockPrices[`CY${year} peak`] = `$${yd.peak_price} on ${yd.peak_date}`;
+    return { price: yd.peak_price, date: yd.peak_date };
+  }
+  if (type === 'dec31') {
+    usedStockPrices[`CY${year} Dec31`] = `$${yd.dec31_close} on ${yd.dec31_date}`;
+    return { price: yd.dec31_close, date: yd.dec31_date };
+  }
+  // Daily close (for FMV fallback)
+  const daily = yd.daily_close || {};
+  if (daily[dateStr]) {
+    usedStockPrices[`${dateStr} close`] = `$${daily[dateStr]}`;
+    return { price: daily[dateStr], date: dateStr };
+  }
+  // Nearest previous day
+  const keys = Object.keys(daily).sort();
+  let best = null;
+  for (const k of keys) { if (k <= dateStr) best = k; else break; }
+  if (best) {
+    usedStockPrices[`${dateStr} close (nearest: ${best})`] = `$${daily[best]}`;
+    return { price: daily[best], date: best };
+  }
+  return { price: null, source: 'not found' };
+}
+
+// ─────────────────────────────────────────────
+// PARSE SHAREWORKS EXCEL
+// ─────────────────────────────────────────────
+function parseShareworks(wb) {
+  // Try "Share Holdings" sheet, fallback to first sheet
+  const sheetName = wb.SheetNames.find(n => n.toLowerCase().includes('share hold') || n.toLowerCase().includes('holding'))
+                   || wb.SheetNames[0];
+  log(`Parsing sheet: "${sheetName}"`);
+  const ws = wb.Sheets[sheetName];
+  const rows = XLSX.utils.sheet_to_json(ws, { defval: '' });
+  log(`Found ${rows.length} rows in sheet`);
+
+  const lots = [];
+  const keyMap = {
+    vestDate:   ['release date', 'vest date', 'vesting date', 'date released', 'date vested'],
+    qty:        ['shares released', 'shares vested', 'quantity', 'qty', 'shares', 'net shares'],
+    fmv:        ['fmv at release', 'fmv', 'fair market value', 'price at vest', 'release price', 'price'],
+    soldQty:    ['shares sold', 'sold shares', 'sell to cover shares', 'shares withheld', 'shares sold for tax'],
+    soldPrice:  ['sale price', 'sell price', 'sold price', 'price sold'],
+    soldDate:   ['sale date', 'sell date', 'date sold'],
+  };
+
+  function findKey(row, aliases) {
+    const rowKeys = Object.keys(row).map(k => k.toLowerCase().trim());
+    for (const alias of aliases) {
+      const idx = rowKeys.findIndex(k => k.includes(alias));
+      if (idx >= 0) return Object.keys(row)[idx];
+    }
+    return null;
+  }
+
+  for (const row of rows) {
+    const vestDateKey  = findKey(row, keyMap.vestDate);
+    const qtyKey       = findKey(row, keyMap.qty);
+    const fmvKey       = findKey(row, keyMap.fmv);
+    const soldQtyKey   = findKey(row, keyMap.soldQty);
+    const soldPriceKey = findKey(row, keyMap.soldPrice);
+    const soldDateKey  = findKey(row, keyMap.soldDate);
+
+    const vestDateRaw = vestDateKey ? row[vestDateKey] : null;
+    const vestDate    = parseDate(String(vestDateRaw || ''));
+    if (!vestDate) continue;
+
+    const qty      = parseFloat((qtyKey ? row[qtyKey] : '') || '0') || 0;
+    const fmv      = parseFloat((fmvKey ? row[fmvKey] : '') || '0') || 0;
+    const soldQty  = parseFloat((soldQtyKey ? row[soldQtyKey] : '') || '0') || 0;
+    const soldPrice = parseFloat((soldPriceKey ? row[soldPriceKey] : '') || '0') || 0;
+    const soldDateRaw = soldDateKey ? row[soldDateKey] : null;
+    const soldDate  = parseDate(String(soldDateRaw || '')) || vestDate;
+
+    if (qty <= 0) continue;
+
+    lots.push({ vestDate, qty, fmv, soldQty, soldPrice, soldDate });
+  }
+
+  log(`Parsed ${lots.length} vesting lots`);
+  return lots;
+}
+
+// ─────────────────────────────────────────────
+// CORE ITR FA A3 CALCULATION
+// ─────────────────────────────────────────────
+function computeFA3(lots, calendarYear) {
+  const rows = [];
+  let slNo = 1;
+
+  for (const lot of lots) {
+    const vy = parseInt(lot.vestDate.slice(0, 4));
+    // Only include if vest date is on or before Dec 31 of calendarYear
+    // AND the lot was ever held during calendarYear
+    if (vy > calendarYear) continue;
+
+    // Vesting FX rate (actual vesting date)
+    const vestFx  = getFxRate(lot.vestDate, 'vesting');
+
+    // FMV: use from report; fallback to stock price on vest date
+    let fmvUsd = lot.fmv;
+    if (!fmvUsd || fmvUsd === 0) {
+      const sp = getStockPrice(lot.vestDate, 'close');
+      fmvUsd = sp.price || 0;
+      log(`  Lot ${lot.vestDate}: FMV not in report, using stock price $${fmvUsd}`, 'warn');
+    }
+
+    // Initial value = qty × FMV × vest FX rate
+    const initialValueInr = lot.qty * fmvUsd * vestFx.rate;
+
+    // Peak value: max of (peak price in CY) × qty held at that point × peak-date FX rate
+    // Qty held at peak = total vested qty (incl STC shares, gross)
+    const peakStock = getStockPrice(`${calendarYear}-01-01`, 'peak');
+    const peakFx    = getFxRate(peakStock.date || `${calendarYear}-12-31`, 'vesting');
+    const qtyAtPeak = lot.qty; // gross vested shares for FA disclosure
+    const peakValueInr = peakStock.price ? qtyAtPeak * peakStock.price * peakFx.rate : 0;
+
+    // Closing value (Dec 31 or last trading day of CY)
+    const dec31Stock = getStockPrice(`${calendarYear}-12-31`, 'dec31');
+    const dec31Fx    = getFxRate(`${calendarYear}-12-31`, 'vesting');
+    const netHeld    = lot.qty - lot.soldQty; // shares still held at Dec 31
+    const closingValueInr = (dec31Stock.price && netHeld > 0)
+      ? netHeld * dec31Stock.price * dec31Fx.rate : 0;
+
+    // Gross amount paid/credited = vesting perquisite value (same as initial value — already in salary)
+    const grossPaidInr = initialValueInr;
+
+    // Sale proceeds (sell-to-cover + any other sales in CY)
+    let saleProceedsInr = 0;
+    let saleProceedsUsd = 0;
+    if (lot.soldQty > 0 && lot.soldPrice > 0) {
+      const saleFx = getFxRate(lot.soldDate, 'sale'); // preceding month-end per Rule 115
+      saleProceedsUsd = lot.soldQty * lot.soldPrice;
+      saleProceedsInr = saleProceedsUsd * saleFx.rate;
+    }
+
+    // Nature of income
+    const hasCapGain = lot.soldQty > 0;
+    const holdingMonths = lot.soldQty > 0
+      ? Math.round((new Date(lot.soldDate) - new Date(lot.vestDate)) / (1000 * 60 * 60 * 24 * 30))
+      : 0;
+    const isLTCG = holdingMonths >= 24;
+    const natureOfIncome = hasCapGain
+      ? (isLTCG ? 'Long Term Capital Gains' : 'Short Term Capital Gains')
+      : 'Salary / Perquisite';
+    const incomeSchedule = hasCapGain
+      ? (isLTCG ? 'Schedule CG (B9 - LTCG unlisted)' : 'Schedule CG (A5 - STCG other)')
+      : 'Schedule Salary (Form 16)';
+
+    rows.push({
+      slNo: slNo++,
+      country: ENTITY.country,
+      countryCode: ENTITY.countryCode,
+      name: ENTITY.name,
+      address: ENTITY.address,
+      zip: ENTITY.zip,
+      nature: ENTITY.nature,
+      dateAcquired: lot.vestDate,
+      qtyVested: lot.qty,
+      qtyNet: netHeld,
+      fmvUsd: fmvUsd.toFixed(2),
+      vestFxRate: vestFx.rate.toFixed(2),
+      vestFxDate: vestFx.date,
+      initialValueInr: Math.round(initialValueInr),
+      peakPrice: peakStock.price,
+      peakDate: peakStock.date,
+      peakFxRate: peakFx.rate.toFixed(2),
+      peakValueInr: Math.round(peakValueInr),
+      dec31Price: dec31Stock.price,
+      dec31FxRate: dec31Fx.rate.toFixed(2),
+      closingValueInr: Math.round(closingValueInr),
+      grossPaidInr: Math.round(grossPaidInr),
+      soldQty: lot.soldQty,
+      soldPrice: lot.soldPrice,
+      soldDate: lot.soldDate,
+      saleProceedsUsd: saleProceedsUsd.toFixed(2),
+      saleProceedsInr: Math.round(saleProceedsInr),
+      natureOfIncome,
+      incomeSchedule,
+      holdingMonths,
+    });
+  }
+
+  return rows;
+}
+
+// ─────────────────────────────────────────────
+// RENDER RESULTS TABLE
+// ─────────────────────────────────────────────
+function renderResults(rows, calendarYear) {
+  const tbody = document.getElementById('resultsBody');
+  tbody.innerHTML = '';
+
+  for (const r of rows) {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td class="text-center">${r.slNo}</td>
+      <td>${r.country}</td>
+      <td>${r.name}</td>
+      <td>${r.nature}</td>
+      <td>${r.dateAcquired}</td>
+      <td class="text-right">₹${r.initialValueInr.toLocaleString('en-IN')}</td>
+      <td class="text-right">₹${r.peakValueInr.toLocaleString('en-IN')}</td>
+      <td class="text-right">₹${r.closingValueInr.toLocaleString('en-IN')}</td>
+      <td class="text-right">₹${r.grossPaidInr.toLocaleString('en-IN')}</td>
+      <td class="text-right">₹${r.saleProceedsInr.toLocaleString('en-IN')}</td>
+      <td>${r.natureOfIncome}</td>
+      <td>${r.incomeSchedule}</td>
+    `;
+    tbody.appendChild(tr);
+  }
+
+  // FX rates used
+  const fxList = document.getElementById('fxRatesList');
+  fxList.innerHTML = Object.entries(usedFxRates)
+    .map(([k, v]) => `<div>${k}: ₹${v}</div>`).join('');
+
+  // Stock prices used
+  const spList = document.getElementById('stockPricesList');
+  spList.innerHTML = Object.entries(usedStockPrices)
+    .map(([k, v]) => `<div>${k}: ${v}</div>`).join('');
+
+  document.getElementById('calcDetails').innerHTML =
+    `<strong>Calendar Year:</strong> ${calendarYear} &nbsp;|&nbsp; 
+     <strong>Lots disclosed:</strong> ${rows.length} &nbsp;|&nbsp;
+     <strong>SBI TT rates per:</strong> Rule 115 (vesting date for acquisition; last working day of preceding month for sale/income) &nbsp;|&nbsp;
+     <strong>Peak price:</strong> highest daily high in CY${calendarYear}`;
+
+  document.getElementById('resultsSection').classList.remove('hidden');
+  document.getElementById('ratesSection').classList.remove('hidden');
+}
+
+// ─────────────────────────────────────────────
+// DOWNLOAD EXCEL
+// ─────────────────────────────────────────────
+function downloadExcel() {
+  const ay = document.getElementById('aySelect').value;
+  const calendarYear = parseInt(ay.split('-')[0]) + 1 - 1; // CY = AY first year
+
+  // Sheet 1: ITR Entry (clean)
+  const entryData = [
+    ['Schedule FA – Section A3: Details of Foreign Equity and Debt Interest'],
+    ['Assessment Year:', ay, 'Calendar Year:', calendarYear],
+    ['Generated by ITR FA A3 Tool', 'Date:', new Date().toLocaleDateString('en-IN')],
+    [],
+    ['Sl No', 'Country Name', 'Country Code', 'Name of Entity', 'Address', 'ZIP',
+     'Nature of Entity', 'Date of Acquiring (YYYY-MM-DD)', 'Initial Investment (₹)',
+     'Peak Value (₹)', 'Closing Value (₹)', 'Gross Amount Paid (₹)',
+     'Gross Sale Proceeds (₹)', 'Nature of Income', 'Income Schedule'],
+    ...outputRows.map(r => [
+      r.slNo, r.country, r.countryCode, r.name, r.address, r.zip, r.nature,
+      r.dateAcquired, r.initialValueInr, r.peakValueInr, r.closingValueInr,
+      r.grossPaidInr, r.saleProceedsInr, r.natureOfIncome, r.incomeSchedule,
+    ]),
+  ];
+
+  // Sheet 2: Calculation Audit
+  const auditData = [
+    ['CALCULATION AUDIT TRAIL – FOR CA REVIEW'],
+    [],
+    ['Sl No', 'Vest Date', 'Qty Vested', 'Net Held', 'FMV (USD)', 'Vest FX Rate',
+     'Vest FX Date', 'Initial (₹)', 'Peak Price (USD)', 'Peak Date', 'Peak FX',
+     'Peak Value (₹)', 'Dec31 Price', 'Dec31 FX', 'Closing (₹)',
+     'Sold Qty', 'Sale Price', 'Sale Date', 'Sale Proceeds (USD)', 'Sale FX Rate', 'Sale Proceeds (₹)',
+     'Holding Months', 'Nature'],
+    ...outputRows.map(r => [
+      r.slNo, r.dateAcquired, r.qtyVested, r.qtyNet, r.fmvUsd, r.vestFxRate, r.vestFxDate,
+      r.initialValueInr, r.peakPrice, r.peakDate, r.peakFxRate, r.peakValueInr,
+      r.dec31Price, r.dec31FxRate, r.closingValueInr,
+      r.soldQty, r.soldPrice, r.soldDate, r.saleProceedsUsd, 0, r.saleProceedsInr,
+      r.holdingMonths, r.natureOfIncome,
+    ]),
+    [],
+    ['DISCLAIMER: This output is for validation purposes only. Consult a qualified CA before filing.'],
+  ];
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(entryData), 'ITR_Entry');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(auditData), 'Calculation_Audit');
+
+  XLSX.writeFile(wb, `ITR_FA_A3_${ay}.xlsx`);
+  log(`Downloaded ITR_FA_A3_${ay}.xlsx`);
+}
+
+// ─────────────────────────────────────────────
+// MAIN PROCESS
+// ─────────────────────────────────────────────
+async function processFile() {
+  const fileInput = document.getElementById('fileInput');
+  if (!fileInput.files[0]) { alert('Please select a file first.'); return; }
+
+  const btn = document.getElementById('processBtn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Processing...';
+  usedFxRates = {};
+  usedStockPrices = {};
+
+  const ay = document.getElementById('aySelect').value;
+  const calendarYear = parseInt(ay.split('-')[0]) + 1 - 1;
+
+  log(`═══ ITR Schedule FA A3 — AY ${ay} (CY ${calendarYear}) ═══`, 'head');
+
+  try {
+    // Load data
+    await loadSbiRates();
+    await loadTeamPrices();
+
+    // Parse Excel
+    const file = fileInput.files[0];
+    const arrayBuffer = await file.arrayBuffer();
+    const wb = XLSX.read(arrayBuffer, { type: 'array', cellDates: true });
+    log(`Opened: ${file.name} (${wb.SheetNames.join(', ')})`);
+
+    const lots = parseShareworks(wb);
+    if (lots.length === 0) {
+      log('No valid vesting lots found. Check the uploaded file.', 'error');
+      btn.disabled = false;
+      btn.innerHTML = '▶ Calculate';
+      return;
+    }
+
+    // Compute
+    log(`Computing FA A3 for CY ${calendarYear}...`, 'head');
+    outputRows = computeFA3(lots, calendarYear);
+    log(`Generated ${outputRows.length} Schedule FA A3 rows`);
+
+    // Render
+    renderResults(outputRows, calendarYear);
+    log('✅ Done! Review results below and download Excel.', 'head');
+
+  } catch (e) {
+    log(`ERROR: ${e.message}`, 'error');
+    console.error(e);
+  }
+
+  btn.disabled = false;
+  btn.innerHTML = '▶ Calculate';
+}
+</script>
+</body>
+</html>

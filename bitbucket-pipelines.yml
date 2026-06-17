@@ -1,0 +1,36 @@
+image: python:3.11-slim
+
+pipelines:
+  # Run manually anytime
+  default:
+    - step:
+        name: "Manual data refresh"
+        script:
+          - pip install yfinance -q
+          - python scripts/update_data.py
+          - git config user.email "pipeline@bitbucket.org"
+          - git config user.name "Bitbucket Pipeline"
+          - git add data/team_prices.json
+          - git diff --cached --quiet || git commit -m "chore: auto-refresh TEAM stock prices [skip ci]"
+          - git push
+
+  # Scheduled: runs on 1st of every month at 6am IST (00:30 UTC)
+  custom:
+    monthly-data-refresh:
+      - step:
+          name: "Monthly auto-refresh TEAM prices"
+          script:
+            - pip install yfinance -q
+            - python scripts/update_data.py
+            - git config user.email "pipeline@bitbucket.org"
+            - git config user.name "Bitbucket Pipeline"
+            - git add data/team_prices.json
+            - git diff --cached --quiet || git commit -m "chore: auto-refresh TEAM stock prices [skip ci]"
+            - git push
+
+schedules:
+  - cron: "30 0 1 * *"   # 1st of every month at 00:30 UTC (6am IST)
+    branches:
+      include:
+        - main
+    pipeline: custom.monthly-data-refresh
