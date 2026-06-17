@@ -142,8 +142,8 @@ const ENTITY = {
 
 // URLs for data
 const SBI_CSV_URL  = 'https://raw.githubusercontent.com/sahilgupta/sbi-fx-ratekeeper/main/csv_files/SBI_REFERENCE_RATES_USD.csv';
-// team_prices.json served from same origin (Bitbucket static site)
-const TEAM_JSON_URL = 'data/team_prices.json';
+// team_prices.json served from GitHub Pages — use absolute URL
+const TEAM_JSON_URL = 'https://arpanagr.github.io/itr-schedule-fa/data/team_prices.json';
 
 // Cache keys
 const CACHE_SBI_KEY   = 'itr_sbi_rates_v1';
@@ -206,9 +206,9 @@ async function loadSbiRates() {
     const rawDate = cols[dateIdx];
     const rawBuy  = parseFloat(cols[buyIdx]);
     if (!rawDate || isNaN(rawBuy)) continue;
-    // Normalise date to YYYY-MM-DD
-    const d = parseDate(rawDate);
-    if (d) sbiRates[d] = rawBuy;
+    // Normalise date to YYYY-MM-DD — handle "2020-01-04 09:00" format
+    const d = rawDate.slice(0, 10); // just take YYYY-MM-DD
+    if (d && /^\d{4}-\d{2}-\d{2}$/.test(d) && !isNaN(rawBuy) && rawBuy > 0) sbiRates[d] = rawBuy;
   }
   cacheSet(CACHE_SBI_KEY, sbiRates);
   log(`SBI rates: loaded ${Object.keys(sbiRates).length} dates (2020–present)`);
@@ -341,17 +341,43 @@ function parseShareworks(wb) {
                    || wb.SheetNames[0];
   log(`Parsing sheet: "${sheetName}"`);
   const ws = wb.Sheets[sheetName];
-  const rows = XLSX.utils.sheet_to_json(ws, { defval: '' });
-  log(`Found ${rows.length} rows in sheet`);
+
+  // Shareworks report has a title row (row 1 = "Share Holdings"), real headers in row 2
+  // Use header:1 to get raw arrays, then find the real header row
+  const rawRows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+  log(`Found ${rawRows.length} rows in sheet`);
+
+  // Find the header row — it's the first row that contains "Acquisition Date" or "As Of Date"
+  let headerRowIdx = 0;
+  for (let i = 0; i < Math.min(5, rawRows.length); i++) {
+    const rowStr = rawRows[i].join('|').toLowerCase();
+    if (rowStr.includes('acquisition date') || rowStr.includes('as of date') || rowStr.includes('vest date')) {
+      headerRowIdx = i;
+      break;
+    }
+  }
+  const headers = rawRows[headerRowIdx].map(h => String(h).toLowerCase().trim());
+  log(`Header row at index ${headerRowIdx}: ${headers.filter(h=>h).join(', ')}`);
+
+  // Convert remaining rows to objects using found headers
+  const rows = [];
+  for (let i = headerRowIdx + 1; i < rawRows.length; i++) {
+    if (!rawRows[i].some(v => v !== '')) continue; // skip empty rows
+    const obj = {};
+    headers.forEach((h, idx) => { if (h) obj[h] = rawRows[i][idx]; });
+    rows.push(obj);
+  }
+  log(`Data rows: ${rows.length}`);
 
   const lots = [];
   const keyMap = {
-    vestDate:   ['release date', 'vest date', 'vesting date', 'date released', 'date vested'],
-    qty:        ['shares released', 'shares vested', 'quantity', 'qty', 'shares', 'net shares'],
-    fmv:        ['fmv at release', 'fmv', 'fair market value', 'price at vest', 'release price', 'price'],
+    // Shareworks "Share Holdings" actual column names + common aliases
+    vestDate:   ['acquisition date', 'release date', 'vest date', 'vesting date', 'date released', 'date vested'],
+    qty:        ['total shares you hold', 'shares released', 'shares vested', 'quantity', 'qty', 'shares', 'net shares'],
+    fmv:        ['cost basis per share', 'fmv at release', 'fmv', 'fair market value', 'price at vest', 'release price', 'price'],
     soldQty:    ['shares sold', 'sold shares', 'sell to cover shares', 'shares withheld', 'shares sold for tax'],
-    soldPrice:  ['sale price', 'sell price', 'sold price', 'price sold'],
-    soldDate:   ['sale date', 'sell date', 'date sold'],
+    soldPrice:  ['sale price', 'sell price', 'sold price', 'price sold', 'current price per share'],
+    soldDate:   ['sale date', 'sell date', 'date sold', 'as of date'],
   };
 
   function findKey(row, aliases) {
