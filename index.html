@@ -362,9 +362,14 @@ function parseShareworks(wb) {
   // Convert remaining rows to objects using found headers
   const rows = [];
   for (let i = headerRowIdx + 1; i < rawRows.length; i++) {
-    if (!rawRows[i].some(v => v !== '')) continue; // skip empty rows
+    const row = rawRows[i];
+    // Skip truly empty rows (all cells empty) and totals rows (no acquisition date)
+    if (!row.some(v => v !== '' && v !== null && v !== undefined)) continue;
     const obj = {};
-    headers.forEach((h, idx) => { if (h) obj[h] = rawRows[i][idx]; });
+    headers.forEach((h, idx) => { if (h) obj[h] = row[idx]; });
+    // Skip totals/summary rows — they won't have an acquisition date
+    const acqVal = obj['acquisition date'] || obj['vest date'] || obj['release date'];
+    if (!acqVal) continue;
     rows.push(obj);
   }
   log(`Data rows: ${rows.length}`);
