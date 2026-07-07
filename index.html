@@ -543,8 +543,8 @@ function parseSalesSheet(wb) {
     if (saleType.includes('sell-to-cover') || saleType.includes('sell to cover') || saleType === 'stc') continue;
     if (!saleType) continue; // skip totals row
 
-    const saleDate = saleDateCol >= 0 ? parseExcelDate(row[saleDateCol]) : null;
-    const acqDate  = acqDateCol  >= 0 ? parseExcelDate(row[acqDateCol])  : null;
+    const saleDate = saleDateCol >= 0 ? parseDate(row[saleDateCol]) : null;
+    const acqDate  = acqDateCol  >= 0 ? parseDate(row[acqDateCol])  : null;
     const shares   = sharesSoldCol >= 0 ? parseNum(row[sharesSoldCol]) : 0;
     const price    = salePriceCol  >= 0 ? parseNum(row[salePriceCol])  : 0;
     const proceeds = saleProcCol   >= 0 ? parseNum(row[saleProcCol])   : 0;
