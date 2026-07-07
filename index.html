@@ -139,9 +139,12 @@
 // ─────────────────────────────────────────────
 // CONSTANTS
 // ─────────────────────────────────────────────
+// Sanitize string — remove commas for ITR portal compatibility
+const sanitize = s => s ? String(s).replace(/,/g, '') : '';
+
 const ENTITY = {
   name:    'Atlassian Corporation',
-  address: '350 Bush Street, Floor 13, San Francisco CA 94104, United States',
+  address: '350 Bush Street Floor 13 San Francisco CA 94104 United States',
   zip:     '94104',
   nature:  'Software Services',
   country: 'United States',
@@ -720,10 +723,10 @@ function downloadExcel() {
      'Total gross amount paid/credited with respect to the holding during the period',
      'Total gross proceeds from sale or redemption of investment during the period'],
     ...outputRows.map(r => [
-      r.country,
-      `2 - ${r.country}`,  // ITR portal format: "2 - United States"
-      r.name, r.address, r.zip, r.nature,
-      r.dateAcquired,
+      sanitize(r.country),
+      '2',  // ITR portal country code for United States
+      sanitize(r.name), sanitize(r.address), sanitize(r.zip), sanitize(r.nature),
+      r.dateAcquired,  // already YYYY-MM-DD
       r.initialValueInr,
       r.peakValueInr,
       r.closingValueInr,
