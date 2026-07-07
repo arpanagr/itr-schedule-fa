@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>User Guide — ITR Schedule FA A3 Tool</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f8fafc; color: #1e293b; line-height: 1.7; }
+
+    /* Header */
+    header { background: linear-gradient(135deg, #0052cc 0%, #0747a6 100%); color: white; padding: 40px 24px; text-align: center; }
+    header h1 { font-size: 2rem; font-weight: 700; margin-bottom: 8px; }
+    header p { font-size: 1.1rem; opacity: 0.9; }
+    .back-btn { display: inline-block; margin-top: 16px; padding: 8px 20px; background: rgba(255,255,255,0.2); color: white; text-decoration: none; border-radius: 6px; font-size: 0.9rem; border: 1px solid rgba(255,255,255,0.4); transition: background 0.2s; }
+    .back-btn:hover { background: rgba(255,255,255,0.3); }
+
+    /* Disclaimer */
+    .disclaimer { background: #fff3cd; border-left: 4px solid #f59e0b; padding: 16px 24px; margin: 24px auto; max-width: 900px; border-radius: 0 8px 8px 0; font-size: 0.9rem; }
+    .disclaimer strong { color: #92400e; }
+
+    /* Main */
+    main { max-width: 900px; margin: 0 auto; padding: 24px; }
+
+    /* TOC */
+    .toc { background: white; border: 1px solid #e2e8f0; border-radius: 12px; padding: 24px; margin-bottom: 32px; }
+    .toc h2 { font-size: 1.1rem; color: #0052cc; margin-bottom: 12px; }
+    .toc ol { padding-left: 20px; }
+    .toc li { margin: 6px 0; }
+    .toc a { color: #0052cc; text-decoration: none; }
+    .toc a:hover { text-decoration: underline; }
+
+    /* Sections */
+    section { background: white; border: 1px solid #e2e8f0; border-radius: 12px; padding: 28px; margin-bottom: 24px; }
+    section h2 { font-size: 1.4rem; color: #0052cc; margin-bottom: 16px; padding-bottom: 10px; border-bottom: 2px solid #e2e8f0; display: flex; align-items: center; gap: 10px; }
+    section h3 { font-size: 1.1rem; color: #1e293b; margin: 20px 0 10px; font-weight: 600; }
+    section p { color: #475569; margin-bottom: 12px; }
+    section ul, section ol { padding-left: 22px; color: #475569; margin-bottom: 12px; }
+    section li { margin: 6px 0; }
+
+    /* Steps */
+    .step-list { counter-reset: steps; list-style: none; padding: 0; }
+    .step-list li { counter-increment: steps; display: flex; gap: 16px; margin-bottom: 20px; align-items: flex-start; }
+    .step-list li::before { content: counter(steps); background: #0052cc; color: white; width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 0.9rem; flex-shrink: 0; margin-top: 2px; }
+    .step-content h4 { font-weight: 600; color: #1e293b; margin-bottom: 4px; }
+    .step-content p { color: #475569; margin: 0; font-size: 0.95rem; }
+
+    /* Info boxes */
+    .info-box { border-radius: 8px; padding: 14px 18px; margin: 16px 0; font-size: 0.92rem; }
+    .info-box.blue { background: #eff6ff; border-left: 4px solid #3b82f6; color: #1e40af; }
+    .info-box.green { background: #f0fdf4; border-left: 4px solid #22c55e; color: #166534; }
+    .info-box.yellow { background: #fffbeb; border-left: 4px solid #f59e0b; color: #92400e; }
+    .info-box.red { background: #fef2f2; border-left: 4px solid #ef4444; color: #991b1b; }
+
+    /* Table */
+    table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 0.9rem; }
+    th { background: #f1f5f9; color: #374151; font-weight: 600; padding: 10px 14px; text-align: left; border: 1px solid #e2e8f0; }
+    td { padding: 10px 14px; border: 1px solid #e2e8f0; color: #475569; vertical-align: top; }
+    tr:nth-child(even) td { background: #f8fafc; }
+
+    /* Code */
+    code { background: #f1f5f9; padding: 2px 6px; border-radius: 4px; font-family: monospace; font-size: 0.88em; color: #0052cc; }
+
+    /* Badge */
+    .badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 0.78rem; font-weight: 600; }
+    .badge.green { background: #dcfce7; color: #166534; }
+    .badge.blue { background: #dbeafe; color: #1e40af; }
+    .badge.orange { background: #ffedd5; color: #9a3412; }
+
+    /* FAQ */
+    .faq-item { border-bottom: 1px solid #e2e8f0; padding: 16px 0; }
+    .faq-item:last-child { border-bottom: none; }
+    .faq-q { font-weight: 600; color: #1e293b; margin-bottom: 8px; }
+    .faq-a { color: #475569; font-size: 0.95rem; }
+
+    /* Footer */
+    footer { text-align: center; padding: 32px 24px; color: #94a3b8; font-size: 0.85rem; border-top: 1px solid #e2e8f0; margin-top: 32px; }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>📘 User Guide</h1>
+  <p>ITR Schedule FA — Section A3 Foreign Asset Disclosure Tool</p>
+  <a href="index.html" class="back-btn">← Back to Tool</a>
+</header>
+
+<div class="disclaimer">
+  <strong>⚠️ IMPORTANT DISCLAIMER:</strong> This tool is for <strong>educational and informational purposes only</strong>.
+  All outputs must be reviewed and validated by a qualified <strong>Chartered Accountant (CA)</strong> before filing.
+  The developers and Atlassian assume <strong>no liability</strong> for any tax filing consequences.
+</div>
+
+<main>
+
+  <!-- Table of Contents -->
+  <div class="toc">
+    <h2>📋 Table of Contents</h2>
+    <ol>
+      <li><a href="#overview">What This Tool Does</a></li>
+      <li><a href="#who">Who Should Use This Tool</a></li>
+      <li><a href="#prerequisites">Before You Start</a></li>
+      <li><a href="#steps">Step-by-Step Guide</a></li>
+      <li><a href="#data-sources">Data Sources Used</a></li>
+      <li><a href="#output">Understanding the Output</a></li>
+      <li><a href="#stc">Sell-to-Cover Treatment</a></li>
+      <li><a href="#ay-cy">Assessment Year vs Calendar Year</a></li>
+      <li><a href="#itr-portal">Entering Values in ITR Portal</a></li>
+      <li><a href="#faq">Frequently Asked Questions</a></li>
+      <li><a href="#limitations">Limitations & Disclaimers</a></li>
+    </ol>
+  </div>
+
+  <!-- Section 1: Overview -->
+  <section id="overview">
+    <h2>🔍 1. What This Tool Does</h2>
+    <p>This tool helps <strong>Atlassian employees in India</strong> calculate the values required to fill <strong>Schedule FA — Section A3</strong> (Details of Foreign Equity and Debt Interest) in their Indian Income Tax Return (ITR).</p>
+    <p>When you receive RSUs (Restricted Stock Units) from Atlassian, you must disclose these as foreign assets in your ITR every year — even if you haven't sold any shares. Failure to disclose can attract penalties up to <strong>₹10 lakh per year</strong> under the Black Money Act.</p>
+
+    <h3>What the tool calculates:</h3>
+    <ul>
+      <li><strong>Initial Investment (₹)</strong> — Value of shares on the vesting date (net shares × FMV × SBI TT Buy Rate)</li>
+      <li><strong>Peak Value (₹)</strong> — Highest value of your holding during the calendar year</li>
+      <li><strong>Closing Balance (₹)</strong> — Value of shares held on December 31</li>
+      <li><strong>Gross Sale Proceeds (₹)</strong> — Proceeds from any voluntary share sales (not sell-to-cover)</li>
+    </ul>
+
+    <div class="info-box blue">
+      <strong>📌 Note:</strong> Schedule FA follows the <strong>Calendar Year (January 1 – December 31)</strong>, not the Indian Financial Year (April – March).
+    </div>
+  </section>
+
+  <!-- Section 2: Who -->
+  <section id="who">
+    <h2>👤 2. Who Should Use This Tool</h2>
+    <p>This tool is designed for:</p>
+    <ul>
+      <li>Atlassian employees in India who are <strong>Resident and Ordinarily Resident (ROR)</strong></li>
+      <li>Employees who hold or have held Atlassian RSUs at any point during the calendar year</li>
+      <li>Employees filing <strong>ITR-2 or ITR-3</strong> (required when you have foreign assets)</li>
+    </ul>
+
+    <div class="info-box yellow">
+      <strong>⚠️ Note:</strong> If you are a Non-Resident (NR) or Resident but Not Ordinarily Resident (RNOR), Schedule FA may not apply to you. Consult your CA.
+    </div>
+  </section>
+
+  <!-- Section 3: Prerequisites -->
+  <section id="prerequisites">
+    <h2>✅ 3. Before You Start</h2>
+    <h3>What you need:</h3>
+    <ol class="step-list">
+      <li>
+        <div class="step-content">
+          <h4>Shareworks Account Report (Excel)</h4>
+          <p>Download from Shareworks: <strong>Reports → Account Report</strong>. Save as <code>.xlsx</code>. The file must contain an <strong>"Award Transactions"</strong> sheet with your RSU vesting history.</p>
+        </div>
+      </li>
+      <li>
+        <div class="step-content">
+          <h4>Know your Assessment Year</h4>
+          <p>For the current filing season (July 2026), you are filing for <strong>AY 2026-27</strong>, which covers <strong>Calendar Year 2025</strong> (Jan 1 – Dec 31 2025).</p>
+        </div>
+      </li>
+      <li>
+        <div class="step-content">
+          <h4>A modern web browser</h4>
+          <p>Chrome, Firefox, Safari, or Edge. No installation required — the tool runs entirely in your browser.</p>
+        </div>
+      </li>
+    </ol>
+  </section>
+
+  <!-- Section 4: Steps -->
+  <section id="steps">
+    <h2>🚀 4. Step-by-Step Guide</h2>
+    <ol class="step-list">
+      <li>
+        <div class="step-content">
+          <h4>Download your Shareworks Account Report</h4>
+          <p>Log in to Shareworks → Click <strong>Reports</strong> → Select <strong>Account Report</strong> → Download as Excel (.xlsx). Make sure the report includes all historical vestings (from inception).</p>
+        </div>
+      </li>
+      <li>
+        <div class="step-content">
+          <h4>Open the ITR FA A3 Tool</h4>
+          <p>Visit <a href="index.html">the tool homepage</a>. No login required.</p>
+        </div>
+      </li>
+      <li>
+        <div class="step-content">
+          <h4>Select your Assessment Year</h4>
+          <p>Use the <strong>Assessment Year</strong> dropdown to select the year you are filing for. For current filing (July 2026), select <strong>AY 2026-27 (CY 2025)</strong>.</p>
+        </div>
+      </li>
+      <li>
+        <div class="step-content">
+          <h4>Upload your Shareworks Excel file</h4>
+          <p>Click <strong>"Choose File"</strong> and select your downloaded Account Report Excel file. The tool will automatically parse the <strong>Award Transactions</strong> sheet.</p>
+        </div>
+      </li>
+      <li>
+        <div class="step-content">
+          <h4>Click "Calculate"</h4>
+          <p>The tool will fetch live SBI TT Buy rates and TEAM stock prices, then compute all required FA A3 values. This takes 5–10 seconds.</p>
+        </div>
+      </li>
+      <li>
+        <div class="step-content">
+          <h4>Review the results</h4>
+          <p>Check the on-screen results table. Each row represents one RSU vesting lot. Verify the dates and quantities match your Shareworks statement.</p>
+        </div>
+      </li>
+      <li>
+        <div class="step-content">
+          <h4>Download the Excel output</h4>
+          <p>Click <strong>"Download Excel"</strong> to get a formatted Excel file with 4 sheets: ITR Entry, Table A2 (Custodian), Calculation Audit, and Compliance Notes.</p>
+        </div>
+      </li>
+      <li>
+        <div class="step-content">
+          <h4>Have your CA review the output</h4>
+          <p>Share the downloaded Excel with your Chartered Accountant before entering values in the ITR portal.</p>
+        </div>
+      </li>
+      <li>
+        <div class="step-content">
+          <h4>Enter values in ITR portal</h4>
+          <p>Log in to <a href="https://www.incometax.gov.in" target="_blank">incometax.gov.in</a> → File ITR-2/ITR-3 → Go to Schedule FA → Section A3 → Enter each row from the <strong>"ITR_Entry_A3"</strong> sheet.</p>
+        </div>
+      </li>
+    </ol>
+  </section>
+
+  <!-- Section 5: Data Sources -->
+  <section id="data-sources">
+    <h2>📡 5. Data Sources Used</h2>
+    <table>
+      <tr>
+        <th>Data</th>
+        <th>Source</th>
+        <th>Why This Source</th>
+        <th>Status</th>
+      </tr>
+      <tr>
+        <td><strong>SBI TT Buy Rates</strong></td>
+        <td>GitHub: <code>sahilgupta/sbi-fx-ratekeeper</code></td>
+        <td>Official SBI TT rates archived daily from Jan 2020. Required by Rule 115 of IT Rules 1962.</td>
+        <td><span class="badge green">✅ Live</span></td>
+      </tr>
+      <tr>
+        <td><strong>RSU FMV (Vesting Price)</strong></td>
+        <td>Your uploaded Shareworks Excel</td>
+        <td>The exact Fair Market Value per share on the vesting date as reported by Shareworks.</td>
+        <td><span class="badge green">✅ From file</span></td>
+      </tr>
+      <tr>
+        <td><strong>TEAM Stock Price (Peak & Dec 31)</strong></td>
+        <td>Bundled <code>data/team_prices.json</code> (updated monthly)</td>
+        <td>Daily TEAM closing prices from 2019 to present, used to compute peak value and Dec 31 closing value.</td>
+        <td><span class="badge blue">🔄 Monthly update</span></td>
+      </tr>
+    </table>
+
+    <div class="info-box green">
+      <strong>🔒 Privacy:</strong> Your uploaded Excel file is processed entirely in your browser. No data is sent to any server.
+    </div>
+  </section>
+
+  <!-- Section 6: Output -->
+  <section id="output">
+    <h2>📊 6. Understanding the Output</h2>
+    <p>The downloaded Excel contains <strong>4 sheets</strong>:</p>
+
+    <h3>Sheet 1: ITR_Entry_A3</h3>
+    <p>The clean entry-ready table to copy into the ITR portal. Columns match the official Schedule FA A3 template exactly:</p>
+    <table>
+      <tr><th>Column</th><th>Description</th></tr>
+      <tr><td>Country/Region name</td><td><code>United States</code></td></tr>
+      <tr><td>Country Name and Code</td><td><code>2</code> (ITR portal code for USA)</td></tr>
+      <tr><td>Name of entity</td><td><code>Atlassian Corporation</code></td></tr>
+      <tr><td>Address of entity</td><td>Atlassian's registered US address (no commas)</td></tr>
+      <tr><td>ZIP Code</td><td><code>94104</code></td></tr>
+      <tr><td>Nature of entity</td><td><code>Software Services</code></td></tr>
+      <tr><td>Date of acquiring the interest</td><td>Vesting date in <code>YYYY-MM-DD</code> format</td></tr>
+      <tr><td>Initial value of the investment</td><td>Net shares × FMV (USD) × SBI TT Buy Rate on vesting date (₹)</td></tr>
+      <tr><td>Peak value of investment during the Period</td><td>Net shares × Highest TEAM price in CY × SBI TT Buy Rate on peak date (₹)</td></tr>
+      <tr><td>Closing balance</td><td>Net shares held × TEAM price on Dec 31 × SBI TT Buy Rate on Dec 31 (₹)</td></tr>
+      <tr><td>Total gross amount paid/credited</td><td><code>0</code> (Atlassian does not pay dividends)</td></tr>
+      <tr><td>Total gross proceeds from sale</td><td>Proceeds from voluntary sales only (₹). Sell-to-cover is excluded.</td></tr>
+    </table>
+
+    <h3>Sheet 2: Table_A2_Custodian</h3>
+    <p>Details for <strong>Table A2</strong> (foreign custodial/brokerage account). Auto-computed portfolio values. You will need to manually enter your Shareworks account number and account opening date.</p>
+
+    <h3>Sheet 3: Calculation_Audit</h3>
+    <p>Full audit trail showing every calculation step — FX rates used, stock prices, dates, and a formula legend at the bottom. Share this with your CA for verification.</p>
+
+    <h3>Sheet 4: Compliance_Notes</h3>
+    <p>Checklist of what's covered and what requires manual action (Table A2, Schedule CG, Form 67, etc.).</p>
+  </section>
+
+  <!-- Section 7: STC -->
+  <section id="stc">
+    <h2>🔄 7. Sell-to-Cover (STC) Treatment</h2>
+    <p>When RSUs vest, Atlassian automatically sells some shares to cover your Indian tax liability (TDS). This is called <strong>Sell-to-Cover (STC)</strong>.</p>
+
+    <div class="info-box green">
+      <strong>✅ CA-Confirmed Approach (used by this tool):</strong><br>
+      Only the <strong>net shares received</strong> (after STC) are reported in Schedule FA A3.<br>
+      STC shares are <strong>ignored entirely</strong> — they are not counted as a sale, and do not appear in "Gross sale proceeds."<br><br>
+      <strong>Example:</strong> 87 shares vested → 32 sold as STC → <strong>55 net shares reported</strong>.
+    </div>
+
+    <p>The STC shares are accounted for in your <strong>Form 16</strong> as part of TDS deducted on the perquisite value. There is no double taxation.</p>
+  </section>
+
+  <!-- Section 8: AY vs CY -->
+  <section id="ay-cy">
+    <h2>📅 8. Assessment Year vs Calendar Year</h2>
+    <p>This is the most common source of confusion. Schedule FA uses the <strong>Calendar Year</strong>, not the Indian Financial Year:</p>
+    <table>
+      <tr>
+        <th>Assessment Year (AY)</th>
+        <th>Calendar Year (CY) for Schedule FA</th>
+        <th>Filing Deadline</th>
+      </tr>
+      <tr><td>AY 2022-23</td><td>CY 2021 (Jan 1 – Dec 31 2021)</td><td>July 31, 2022</td></tr>
+      <tr><td>AY 2023-24</td><td>CY 2022 (Jan 1 – Dec 31 2022)</td><td>July 31, 2023</td></tr>
+      <tr><td>AY 2024-25</td><td>CY 2023 (Jan 1 – Dec 31 2023)</td><td>July 31, 2024</td></tr>
+      <tr><td>AY 2025-26</td><td>CY 2024 (Jan 1 – Dec 31 2024)</td><td>July 31, 2025</td></tr>
+      <tr style="background:#eff6ff"><td><strong>AY 2026-27 ← Current</strong></td><td><strong>CY 2025 (Jan 1 – Dec 31 2025)</strong></td><td><strong>July 31, 2026</strong></td></tr>
+    </table>
+
+    <div class="info-box blue">
+      <strong>📌 Important:</strong> You must report <strong>all lots ever vested</strong> that were held at any point during the calendar year — not just lots vested in that year. If you vested shares in 2022 and still hold them in 2025, they must appear in your CY 2025 report.
+    </div>
+  </section>
+
+  <!-- Section 9: ITR Portal -->
+  <section id="itr-portal">
+    <h2>🖥️ 9. Entering Values in the ITR Portal</h2>
+    <ol class="step-list">
+      <li>
+        <div class="step-content">
+          <h4>Log in to incometax.gov.in</h4>
+          <p>Go to <strong>e-File → Income Tax Returns → File Income Tax Return</strong>. Select <strong>ITR-2</strong> (salaried with foreign assets).</p>
+        </div>
+      </li>
+      <li>
+        <div class="step-content">
+          <h4>Navigate to Schedule FA</h4>
+          <p>In the ITR form, scroll to <strong>Schedule FA → Table A3</strong>.</p>
+        </div>
+      </li>
+      <li>
+        <div class="step-content">
+          <h4>Add one row per vesting lot</h4>
+          <p>Click <strong>"Add Row"</strong> for each entry in the <code>ITR_Entry_A3</code> sheet. Enter values exactly as shown — no commas in text fields, dates in <code>YYYY-MM-DD</code> format.</p>
+        </div>
+      </li>
+      <li>
+        <div class="step-content">
+          <h4>Fill Table A2 (Custodian account)</h4>
+          <p>Use values from the <code>Table_A2_Custodian</code> sheet. Enter your Shareworks account number and opening date manually.</p>
+        </div>
+      </li>
+      <li>
+        <div class="step-content">
+          <h4>Complete Schedule FSI and CG</h4>
+          <p>If you had voluntary share sales, report capital gains under <strong>Schedule CG</strong>. Report the same income under <strong>Schedule FSI</strong> with country code 840 (USA). File <strong>Form 67</strong> if you had any foreign tax withheld.</p>
+        </div>
+      </li>
+    </ol>
+
+    <div class="info-box yellow">
+      <strong>⚠️ Portal Tips:</strong>
+      <ul style="margin-top:8px; margin-left:16px;">
+        <li>Do not include commas in text fields (Address, Name)</li>
+        <li>Enter amounts in <strong>whole rupees</strong> (round off decimals)</li>
+        <li>Country code for USA is <strong>2</strong></li>
+        <li>Date format must be <strong>YYYY-MM-DD</strong></li>
+        <li>Nature of entity: <strong>Software Services</strong></li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- Section 10: FAQ -->
+  <section id="faq">
+    <h2>❓ 10. Frequently Asked Questions</h2>
+
+    <div class="faq-item">
+      <div class="faq-q">Q: What FX rate is used for conversions?</div>
+      <div class="faq-a">The tool uses the <strong>SBI Telegraphic Transfer Buying Rate (TT Buy Rate)</strong> as mandated by <strong>Rule 115 of the Income Tax Rules, 1962</strong>. This is the rate at which SBI buys USD from you (when your USD income flows into India). TT Buy is different from TT Sell rate — using TT Sell would be incorrect.</div>
+    </div>
+
+    <div class="faq-item">
+      <div class="faq-q">Q: I have shares vested in 2022 that I still hold. Do I include them?</div>
+      <div class="faq-a">Yes. Schedule FA requires disclosure of <strong>all shares held at any point during the calendar year</strong>. The tool automatically includes prior-year lots that are still in your holding. Each vesting lot appears as a separate row.</div>
+    </div>
+
+    <div class="faq-item">
+      <div class="faq-q">Q: What if my closing balance is zero because all shares were sold?</div>
+      <div class="faq-a">Still report the lot in Schedule FA. Enter the initial value, peak value, <strong>closing balance = 0</strong>, and the full sale proceeds in "Total gross proceeds from sale." A sold position is not an exemption from disclosure.</div>
+    </div>
+
+    <div class="faq-item">
+      <div class="faq-q">Q: Should I use ITR-1, ITR-2, or ITR-3?</div>
+      <div class="faq-a">ITR-1 and ITR-4 do NOT have Schedule FA. You must use <strong>ITR-2</strong> (if salaried with no business income) or <strong>ITR-3</strong> (if you have business income).</div>
+    </div>
+
+    <div class="faq-item">
+      <div class="faq-q">Q: What is the "peak value"?</div>
+      <div class="faq-a">The peak value is the <strong>highest value of your holding on any single day</strong> during the calendar year. The tool finds the day when TEAM's stock price was highest during the year, and multiplies it by your net shares on that day × the SBI TT Buy rate for that date.</div>
+    </div>
+
+    <div class="faq-item">
+      <div class="faq-q">Q: My data doesn't load — I see "using bundled fallback prices"</div>
+      <div class="faq-a">This happens when the tool is opened locally (from your Downloads folder) due to browser security restrictions. Use the live site at <strong>https://arpanagr.github.io/itr-schedule-fa/</strong> for full functionality with live data.</div>
+    </div>
+
+    <div class="faq-item">
+      <div class="faq-q">Q: Is this tool officially approved by Atlassian or the Income Tax Department?</div>
+      <div class="faq-a">No. This is an <strong>unofficial educational tool</strong> built to help employees understand the calculations. It is NOT endorsed by Atlassian or the Income Tax Department. Always consult a qualified CA before filing.</div>
+    </div>
+
+    <div class="faq-item">
+      <div class="faq-q">Q: What about shares sold voluntarily (not sell-to-cover)?</div>
+      <div class="faq-a">Voluntary sales are captured from the <strong>Sales</strong> sheet in your Shareworks report. The proceeds are shown in the "Total gross proceeds from sale" column. You must also report these as <strong>Capital Gains in Schedule CG</strong> of your ITR.</div>
+    </div>
+  </section>
+
+  <!-- Section 11: Limitations -->
+  <section id="limitations">
+    <h2>⚠️ 11. Limitations & Disclaimers</h2>
+    <ul>
+      <li>This tool is designed specifically for <strong>Atlassian RSU holders</strong> in India. It may not work correctly for other companies or other types of equity compensation (ESOPs, ESPP, etc.).</li>
+      <li>SBI TT Buy rates are sourced from a third-party GitHub archive (not directly from SBI). Verify key dates independently from the SBI website.</li>
+      <li>TEAM stock prices used for peak and closing values are sourced from a monthly-updated JSON file. For very recent dates, prices may not be current.</li>
+      <li>The tool does <strong>not</strong> compute Schedule CG (Capital Gains), Schedule FSI, Schedule TR, or Form 67. These must be done separately.</li>
+      <li>The tool assumes you are a <strong>Resident and Ordinarily Resident (ROR)</strong>. If your residential status is different, consult a CA.</li>
+      <li>All values should be <strong>rounded to whole rupees</strong> when entering in the ITR portal.</li>
+      <li><strong>Always have a qualified Chartered Accountant review the output</strong> before filing your ITR. Tax laws change — this tool may not reflect the latest amendments.</li>
+    </ul>
+
+    <div class="info-box red">
+      <strong>⚖️ No Liability:</strong> The developers and Atlassian assume NO responsibility for incorrect tax filings, penalties, or legal consequences arising from the use of this tool. Use at your own risk and always consult a CA.
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  <p>ITR Schedule FA A3 Tool — Educational Use Only</p>
+  <p style="margin-top:6px">⚠️ Always consult a qualified CA before filing your ITR</p>
+  <p style="margin-top:6px"><a href="index.html" style="color:#0052cc">← Back to Tool</a></p>
+</footer>
+
+</body>
+</html>
