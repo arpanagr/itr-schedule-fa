@@ -55,17 +55,11 @@
           <option value="2022-23">AY 2022-23 (CY 2021)</option>
           <option value="2023-24">AY 2023-24 (CY 2022)</option>
           <option value="2024-25">AY 2024-25 (CY 2023)</option>
-          <option value="2025-26" selected>AY 2025-26 (CY 2024)</option>
-          <option value="2026-27">AY 2026-27 (CY 2025)</option>
+          <option value="2025-26">AY 2025-26 (CY 2024)</option>
+          <option value="2026-27" selected>AY 2026-27 (CY 2025)</option>
         </select>
       </div>
-      <div>
-        <label class="block text-sm font-medium text-gray-600 mb-1">STC Treatment</label>
-        <select id="stcMode" class="border border-gray-300 rounded-lg p-2 text-sm text-gray-700">
-          <option value="gross">Gross shares + STC as sale proceeds (conservative)</option>
-          <option value="net">Net shares only — exclude STC (ClearTax view)</option>
-        </select>
-      </div>
+
       <button id="processBtn" onclick="processFile()"
         class="bg-blue-700 hover:bg-blue-800 text-white font-semibold px-5 py-2 rounded-lg text-sm transition">
         ▶ Calculate
@@ -160,7 +154,7 @@ const TEAM_JSON_URL = 'https://raw.githubusercontent.com/arpanagr/itr-schedule-f
 
 // Cache keys
 const CACHE_SBI_KEY   = 'itr_sbi_rates_v1';
-const CACHE_TEAM_KEY  = 'itr_team_prices_v2';
+const CACHE_TEAM_KEY  = 'itr_team_prices_v3';
 const CACHE_TTL_MS    = 24 * 60 * 60 * 1000; // 24 hours
 
 // Global state
@@ -251,16 +245,16 @@ async function loadTeamPrices() {
   } catch (e) {
     log('Could not load team_prices.json — using bundled fallback prices', 'warn');
     // Fallback hardcoded (updated as of June 2026)
-    teamPrices = {
-      2019: { peak_price: 149.80, peak_date: '2019-07-26', dec31_close: 120.34, daily_close: {} },
-      2020: { peak_price: 250.03, peak_date: '2020-12-17', dec31_close: 233.87, daily_close: {} },
-      2021: { peak_price: 483.13, peak_date: '2021-10-29', dec31_close: 381.29, daily_close: {} },
-      2022: { peak_price: 380.63, peak_date: '2022-01-03', dec31_close: 128.68, daily_close: {} },
-      2023: { peak_price: 248.00, peak_date: '2023-12-22', dec31_close: 237.86, daily_close: {} },
-      2024: { peak_price: 287.97, peak_date: '2024-12-04', dec31_close: 243.38, daily_close: {} },
-      2025: { peak_price: 326.00, peak_date: '2025-02-10', dec31_close: 162.14, daily_close: {} },
-      2026: { peak_price: 163.92, peak_date: '2026-01-07', dec31_close: null,   daily_close: {} },
-    };
+    teamPrices = { annual: {
+      2019: { peak_price: 149.80, peak_date: '2019-07-26', dec31_close: 120.34, dec31_date: '2019-12-31', daily_close: {} },
+      2020: { peak_price: 250.03, peak_date: '2020-12-17', dec31_close: 233.87, dec31_date: '2020-12-31', daily_close: {} },
+      2021: { peak_price: 483.13, peak_date: '2021-10-29', dec31_close: 381.29, dec31_date: '2021-12-31', daily_close: {} },
+      2022: { peak_price: 380.63, peak_date: '2022-01-03', dec31_close: 128.68, dec31_date: '2022-12-30', daily_close: {} },
+      2023: { peak_price: 248.00, peak_date: '2023-12-22', dec31_close: 237.86, dec31_date: '2023-12-29', daily_close: {} },
+      2024: { peak_price: 287.97, peak_date: '2024-12-04', dec31_close: 243.38, dec31_date: '2024-12-31', daily_close: {} },
+      2025: { peak_price: 326.00, peak_date: '2025-02-10', dec31_close: 162.14, dec31_date: '2025-12-31', daily_close: {} },
+      2026: { peak_price: 163.92, peak_date: '2026-01-07', dec31_close: null,   dec31_date: null,          daily_close: {} },
+    }};
   }
 }
 
@@ -323,7 +317,8 @@ function getFxRate(dateStr, forType = 'vesting') {
 // ─────────────────────────────────────────────
 function getStockPrice(dateStr, type = 'close') {
   const year = parseInt(dateStr.slice(0, 4));
-  const yd = teamPrices[String(year)] || teamPrices[year];
+  const annual = teamPrices.annual || teamPrices;
+  const yd = annual[String(year)] || annual[year];
   if (!yd) return { price: null, source: 'not found' };
 
   if (type === 'peak') {
@@ -496,10 +491,71 @@ function parseShareworks(wb) {
   return lots;
 }
 
+
+// ─────────────────────────────────────────────
+// PARSE VOLUNTARY SALES (non-STC) FROM SALES SHEET
+// CA-confirmed: STC sales are ignored; only voluntary sales appear in FA A3
+// ─────────────────────────────────────────────
+function parseSalesSheet(wb) {
+  const sheetName = wb.SheetNames.find(n => n.toLowerCase().includes('sales'));
+  if (!sheetName) return [];
+  const ws = wb.Sheets[sheetName];
+  const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null, raw: true });
+
+  // Find header row
+  let headerIdx = -1;
+  for (let i = 0; i < Math.min(rows.length, 5); i++) {
+    const r = rows[i];
+    if (r && r.some(c => c && String(c).toLowerCase().includes('sale type'))) {
+      headerIdx = i; break;
+    }
+  }
+  if (headerIdx < 0) return [];
+
+  const headers = rows[headerIdx].map(h => h ? String(h).toLowerCase().trim() : '');
+  const getCol = (keys) => {
+    for (const k of keys) {
+      const idx = headers.findIndex(h => h.includes(k));
+      if (idx >= 0) return idx;
+    }
+    return -1;
+  };
+
+  const saleTypeCol   = getCol(['sale type']);
+  const saleDateCol   = getCol(['sale date']);
+  const acqDateCol    = getCol(['acquisition date']);
+  const sharesSoldCol = getCol(['shares sold']);
+  const salePriceCol  = getCol(['sale price per share']);
+  const saleProcCol   = getCol(['sale proceeds']);
+
+  const voluntarySales = [];
+  for (let i = headerIdx + 1; i < rows.length; i++) {
+    const row = rows[i];
+    if (!row || !row.some(v => v !== null)) continue;
+
+    const saleType = saleTypeCol >= 0 ? String(row[saleTypeCol] || '').toLowerCase().trim() : '';
+    // Skip STC — only voluntary (open market) sales
+    if (saleType.includes('sell-to-cover') || saleType.includes('sell to cover') || saleType === 'stc') continue;
+    if (!saleType) continue; // skip totals row
+
+    const saleDate = saleDateCol >= 0 ? parseExcelDate(row[saleDateCol]) : null;
+    const acqDate  = acqDateCol  >= 0 ? parseExcelDate(row[acqDateCol])  : null;
+    const shares   = sharesSoldCol >= 0 ? parseNum(row[sharesSoldCol]) : 0;
+    const price    = salePriceCol  >= 0 ? parseNum(row[salePriceCol])  : 0;
+    const proceeds = saleProcCol   >= 0 ? parseNum(row[saleProcCol])   : 0;
+
+    if (!saleDate || !shares || !price) continue;
+
+    voluntarySales.push({ saleType, saleDate, acqDate, shares, price, proceeds });
+  }
+
+  log(`Found ${voluntarySales.length} voluntary sale(s) in Sales sheet (STC excluded)`);
+  return voluntarySales;
+}
 // ─────────────────────────────────────────────
 // CORE ITR FA A3 CALCULATION
 // ─────────────────────────────────────────────
-function computeFA3(lots, calendarYear, stcMode = "gross") {
+function computeFA3(lots, calendarYear) {
   const rows = [];
   let slNo = 1;
 
@@ -519,8 +575,8 @@ function computeFA3(lots, calendarYear, stcMode = "gross") {
       log(`  Lot ${lot.vestDate}: FMV not in report, using stock price $${fmvUsd}`, 'warn');
     }
 
-    // STC mode: gross = all vested shares, net = only shares received (qtyHeld)
-    const reportQty = (stcMode === 'net' && lot.qtyHeld > 0) ? lot.qtyHeld : lot.qty;
+    // CA-confirmed: always use net shares (qtyHeld) — STC is excluded entirely
+    const reportQty = lot.qtyHeld > 0 ? lot.qtyHeld : lot.qty;
 
     // Initial value = reportQty × FMV × vest FX rate
     const initialValueInr = reportQty * fmvUsd * vestFx.rate;
@@ -545,31 +601,18 @@ function computeFA3(lots, calendarYear, stcMode = "gross") {
     // Gross amount paid/credited = vesting perquisite value (same as initial value — in Form 16/salary)
     const grossPaidInr = initialValueInr;
 
-    // Sale proceeds (sell-to-cover only — per Award Transactions)
-    // In 'net' mode: STC shares not reported → no sale proceeds either
-    let saleProceedsInr = 0;
-    let saleProceedsUsd = 0;
-    if (stcMode === 'gross' && lot.stcQty > 0 && lot.stcPrice > 0) {
-      const saleFx = getFxRate(lot.stcDate, 'sale'); // preceding month-end per Rule 115
-      saleProceedsUsd = lot.stcQty * lot.stcPrice;
-      saleProceedsInr = saleProceedsUsd * saleFx.rate;
-    }
+    // Sale proceeds — CA confirmed: STC is ignored entirely, always ₹0
+    // Only voluntary (open market) sales appear as separate FA A3 rows
+    const saleProceedsInr = 0;
+    const saleProceedsUsd = 0;
 
-    // Nature of income — STC sale is on vesting date (same day), so it's salary/perquisite
-    // STC happens immediately at vesting — no holding period → treated as part of perquisite
-    const hasSTCSale = lot.stcQty > 0;
-    const holdingDays = hasSTCSale
-      ? Math.round((new Date(lot.stcDate) - new Date(lot.vestDate)) / (1000 * 60 * 60 * 24))
-      : 0;
+    // Holding period — for net shares (qtyHeld), from vest date to Dec 31 of CY
+    const holdingDays = Math.round((new Date(`${calendarYear}-12-31`) - new Date(lot.vestDate)) / (1000 * 60 * 60 * 24));
     const holdingMonths = Math.round(holdingDays / 30);
-    // STC is same-day or next-day → 0 holding → always STCG (or perquisite)
     const isLTCG = holdingMonths >= 24;
-    const natureOfIncome = hasSTCSale
-      ? (isLTCG ? 'Long Term Capital Gains' : 'Short Term Capital Gains / Perquisite (STC)')
-      : 'Salary / Perquisite';
-    const incomeSchedule = hasSTCSale
-      ? (isLTCG ? 'Schedule CG (B9 - LTCG unlisted)' : 'Schedule CG (A5 - STCG other)')
-      : 'Schedule Salary (Form 16)';
+    // CA confirmed: STC ignored — net shares taxed as salary/perquisite at vesting
+    const natureOfIncome = 'Salary / Perquisite (vesting — Form 16)';
+    const incomeSchedule = 'Schedule Salary (Form 16)';
 
     rows.push({
       slNo: slNo++,
@@ -660,7 +703,7 @@ function renderResults(rows, calendarYear) {
 // ─────────────────────────────────────────────
 function downloadExcel() {
   const ay = document.getElementById('aySelect').value;
-  const calendarYear = parseInt(ay.split('-')[0]) + 1 - 1; // CY = AY first year
+  const calendarYear = parseInt(ay.split('-')[0]) - 1; // CY = AY first year - 1 (e.g. AY 2026-27 → CY 2025)
 
   // Sheet 1: ITR Entry (clean)
   const entryData = [
@@ -698,6 +741,20 @@ function downloadExcel() {
       r.stcQty, r.stcPrice, r.stcDate, r.saleProceedsUsd, r.saleProceedsInr,
       r.holdingMonths, r.natureOfIncome,
     ]),
+    [],
+    ['─── FORMULA LEGEND ───', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', ''],
+    ['Column', 'Formula Used', 'Rule / Source'],
+    ['Initial Investment (₹)', 'Net Held Qty × FMV (USD/share on vest date) × SBI TT Buy Rate on vest date', 'Rule 115 — TTBR on vesting date'],
+    ['Peak Value (₹)', 'Net Held Qty × Highest daily closing price in CY × SBI TT Buy Rate on that peak date', 'ITD document Section 5 — peak during calendar year'],
+    ['Closing Value (₹)', 'Net Held Qty × TEAM closing price on Dec 31 × SBI TT Buy Rate on Dec 31', 'ITD document Section 5 — Dec 31 closing balance'],
+    ['Gross Sale Proceeds (₹)', 'Voluntary Sale Qty × Sale Price (USD) × SBI TT Buy Rate on last day of month preceding sale', 'Rule 115(f) — last day of prev month for capital gains'],
+    ['Gross Amount Paid/Credited (₹)', '₹0 — Atlassian Corporation does not pay dividends', 'ITD Table A3 field — dividends only'],
+    ['Net Held Qty', 'Shares Held column from Shareworks Award Transactions sheet (after STC deduction)', 'Per CA guidance — STC shares excluded from FA A3'],
+    ['STC (Sell-To-Cover)', 'Ignored entirely — not reported in FA A3', 'Per CA guidance — STC is a tax withholding mechanism, not a voluntary sale'],
+    ['SBI TT Buy Rate', 'Fetched from github.com/sahilgupta/sbi-fx-ratekeeper daily CSV', 'Rule 115 — TT Buying Rate of SBI (officialforexrates.com source)'],
+    ['Peak Date', 'Date of highest TEAM daily closing price during the calendar year', 'Computed from team_prices.json (Alpha Vantage / Yahoo Finance data)'],
+    ['Vesting FX Date', 'Actual vesting date (or next working day if market holiday)', 'Rule 115 — rate on the date of vesting'],
+    ['Sale FX Date', 'Last working day of month preceding the sale month', 'Rule 115(f) — specified date for capital gains'],
     [],
     ['DISCLAIMER: This output is for validation purposes only. Consult a qualified CA before filing.'],
   ];
@@ -791,9 +848,8 @@ async function processFile() {
   usedStockPrices = {};
 
   const ay = document.getElementById('aySelect').value;
-  const stcMode = document.getElementById("stcMode").value;
-  log(`STC mode: ${stcMode === 'gross' ? 'Gross shares + STC proceeds' : 'Net shares only (exclude STC)'}`);
-  const calendarYear = parseInt(ay.split('-')[0]) + 1 - 1;
+  log('STC treatment: Net shares only — CA confirmed (STC excluded from FA A3)');
+  const calendarYear = parseInt(ay.split('-')[0]) - 1; // CY = AY first year - 1 (e.g. AY 2026-27 → CY 2025)
 
   log(`═══ ITR Schedule FA A3 — AY ${ay} (CY ${calendarYear}) ═══`, 'head');
 
@@ -816,9 +872,47 @@ async function processFile() {
       return;
     }
 
-    // Compute
+    // Parse voluntary sales (non-STC) from Sales sheet
+    const voluntarySales = parseSalesSheet(wb);
+
+    // Compute FA A3 rows from vesting lots
     log(`Computing FA A3 for CY ${calendarYear}...`, 'head');
-    outputRows = computeFA3(lots, calendarYear, stcMode);
+    outputRows = computeFA3(lots, calendarYear);
+
+    // Add voluntary sale rows for shares sold in this CY (non-STC)
+    const cySales = voluntarySales.filter(s => {
+      const yr = s.saleDate ? parseInt(s.saleDate.slice(0,4)) : 0;
+      return yr === calendarYear;
+    });
+    if (cySales.length > 0) {
+      log(`Adding ${cySales.length} voluntary sale row(s) for CY ${calendarYear}`);
+      for (const sale of cySales) {
+        // Get FX rate for sale date (last working day of previous month per Rule 115)
+        const saleFx = getFxRate(sale.saleDate, 'sale');  // uses last day of prev month per Rule 115
+        const saleProcInr = Math.round(sale.proceeds * saleFx.rate);
+        outputRows.push({
+          vestDate: sale.acqDate || sale.saleDate,
+          qtyVested: sale.shares,
+          fmvUsd: sale.price,
+          vestFxRate: saleFx.rate,
+          vestFxDate: saleFx.date,
+          initialValueInr: Math.round(sale.shares * sale.price * saleFx.rate),
+          peakValueInr: Math.round(sale.shares * sale.price * saleFx.rate),
+          closingValueInr: 0,
+          grossPaidInr: Math.round(sale.shares * sale.price * saleFx.rate),
+          saleProceedsUsd: sale.proceeds,
+          saleProceedsInr: saleProcInr,
+          saleFxRate: saleFx.rate,
+          saleDate: sale.saleDate,
+          saleQty: sale.shares,
+          dec31Price: 0,
+          qtyNet: 0,
+          isVoluntarySale: true,
+          saleType: sale.saleType
+        });
+      }
+    }
+
     log(`Generated ${outputRows.length} Schedule FA A3 rows`);
 
     // Render
