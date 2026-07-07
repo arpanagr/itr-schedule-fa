@@ -806,8 +806,8 @@ function downloadExcel() {
       '(Enter account opening date YYYY-MM-DD)',
       Math.round(totalPeakInr),
       Math.round(totalClosingInr),
-      'INR',
-      Math.round(totalClosingInr),
+      'Nil',                                             // Nature of Amount — no dividends/interest
+      0,                                                  // Amount — 0 since no income paid/credited
     ],
     [],
     ['⚠️ NOTES (remove this row before uploading to ITR portal):'],
