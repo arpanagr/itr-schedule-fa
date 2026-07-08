@@ -266,6 +266,12 @@ async function loadTeamPrices() {
 // ─────────────────────────────────────────────
 // DATE HELPERS
 // ─────────────────────────────────────────────
+function parseNum(val) {
+  if (val === null || val === undefined || val === '') return null;
+  const n = parseFloat(String(val).replace(/[^0-9.-]/g, ''));
+  return isNaN(n) ? null : n;
+}
+
 function parseDate(str) {
   if (!str) return null;
   str = str.trim();
