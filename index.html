@@ -69,11 +69,15 @@
         ▶ Calculate
       </button>
     </div>
-    <div class="mt-2 text-xs text-gray-500 bg-blue-50 border border-blue-200 rounded p-2">
-      💡 <strong>STC Treatment:</strong>
-      <em>Gross</em> — reports all vested shares + STC proceeds as "sale proceeds" (conservative, recommended).
-      <em>Net</em> — reports only shares received after STC, no sale proceeds (ClearTax view).
-      Consult your CA before choosing.
+    <div class="mt-2 text-xs text-gray-500 bg-blue-50 border border-blue-200 rounded p-2 flex flex-wrap items-start gap-3">
+      <div>
+        <label class="block text-sm font-medium text-gray-600 mb-1">Sell-to-Cover (STC) Treatment</label>
+        <select id="stcMode" class="border border-gray-300 rounded-lg p-2 text-sm text-gray-700">
+          <option value="exclude">Exclude STC — net shares only, no STC sale proceeds (ClearTax / conservative)</option>
+          <option value="include">Include STC — show STC as sale proceeds (₹0 STCG, since vest price = sell price)</option>
+        </select>
+        <p class="text-xs text-gray-400 mt-1">Both modes use <strong>net shares (vested − STC)</strong> for peak, initial &amp; closing value. Consult your CA before choosing.</p>
+      </div>
     </div>
     <p class="text-xs text-gray-400 mt-2">
       Upload the <em>Account Report</em> Excel from Shareworks — the "Award Transactions" sheet will be used.
@@ -569,7 +573,7 @@ function parseSalesSheet(wb) {
 // ─────────────────────────────────────────────
 // CORE ITR FA A3 CALCULATION
 // ─────────────────────────────────────────────
-function computeFA3(lots, calendarYear) {
+function computeFA3(lots, calendarYear, stcMode = 'exclude') {
   const rows = [];
   let slNo = 1;
 
@@ -589,16 +593,25 @@ function computeFA3(lots, calendarYear) {
       log(`  Lot ${lot.vestDate}: FMV not in report, using stock price $${fmvUsd}`, 'warn');
     }
 
-    // CA-confirmed: always use net shares (qtyHeld) — STC is excluded entirely
-    const reportQty = lot.qtyHeld > 0 ? lot.qtyHeld : lot.qty;
+    // Net shares = gross vested minus STC (these are the shares actually received by you)
+    // In both modes: peak, initial, and closing values use NET shares only.
+    // Rationale: STC happens simultaneously with vesting — those shares are never truly "held".
+    // Your actual holding after the vesting event settles is (qtyVested - stcQty) shares.
+    const netSharesReceived = lot.qtyHeld > 0
+      ? lot.qtyHeld                              // Shareworks "Shares Held" column = already net of STC
+      : Math.max(0, lot.qty - lot.stcQty);       // fallback: gross - STC
 
-    // Initial value = reportQty × FMV × vest FX rate
-    const initialValueInr = reportQty * fmvUsd * vestFx.rate;
+    const reportQty = netSharesReceived;
 
-    // Qty held at start of CY (for peak calculation)
-    const qtyAtPeak = lot.qtyHeld > 0 ? lot.qtyHeld : reportQty;
+    // Initial value = GROSS vested shares × FMV × vest FX rate
+    // This is the perquisite value — the full taxable income reported in Form 16/salary.
+    // It covers ALL shares released at vesting (including STC shares, which fund the TDS).
+    const grossVestedQty = lot.qtyVested > 0 ? lot.qtyVested : lot.qty;
+    const initialValueInr = grossVestedQty * fmvUsd * vestFx.rate;
 
-    // Peak value: peak price in CY × qty held × peak-date FX rate
+    // Peak value: net shares × peak price in CY × peak-date FX rate
+    // Uses net shares in both modes — STC shares never truly "held", so peak reflects actual holding
+    const qtyAtPeak = reportQty;
     const peakStock = getStockPrice(`${calendarYear}-01-01`, 'peak');
     const peakFx    = getFxRate(peakStock.date || `${calendarYear}-12-31`, 'vesting');
     const peakValueInr = peakStock.price ? qtyAtPeak * peakStock.price * peakFx.rate : 0;
@@ -606,19 +619,25 @@ function computeFA3(lots, calendarYear) {
     // Closing value (Dec 31 or last trading day of CY)
     const dec31Stock = getStockPrice(`${calendarYear}-12-31`, 'dec31');
     const dec31Fx    = getFxRate(`${calendarYear}-12-31`, 'vesting');
-    // Shares still held at Dec 31 = qtyHeld (from report) for current CY lots
-    // For prior year lots: qtyHeld already accounts for all previous STC
-    const netHeld = lot.qtyHeld > 0 ? lot.qtyHeld : Math.max(0, lot.qty - lot.stcQty);
+    const netHeld = reportQty;
     const closingValueInr = (dec31Stock.price && netHeld > 0)
       ? netHeld * dec31Stock.price * dec31Fx.rate : 0;
 
-    // Gross amount paid/credited = vesting perquisite value (same as initial value — in Form 16/salary)
+    // Gross amount paid/credited = vesting perquisite value (in Form 16/salary)
     const grossPaidInr = initialValueInr;
 
-    // Sale proceeds — CA confirmed: STC is ignored entirely, always ₹0
-    // Only voluntary (open market) sales appear as separate FA A3 rows
-    const saleProceedsInr = 0;
-    const saleProceedsUsd = 0;
+    // Sale proceeds:
+    // EXCLUDE mode: STC ignored entirely — ₹0 (ClearTax / conservative approach)
+    // INCLUDE mode: STC shares shown as "Gross Sale Proceeds" using SBI TT rate for last day of preceding month
+    //               STCG = ₹0 because sell price ≈ FMV at vesting (simultaneous)
+    let saleProceedsInr = 0;
+    let saleProceedsUsd = 0;
+    if (stcMode === 'include' && lot.stcQty > 0 && lot.stcPrice > 0) {
+      // Per Rule 115: last working day of preceding month for sale/income
+      const stcFx = getFxRate(lot.stcDate || lot.vestDate, 'sale');
+      saleProceedsUsd = lot.stcQty * lot.stcPrice;
+      saleProceedsInr = saleProceedsUsd * stcFx.rate;
+    }
 
     // Holding period — for net shares (qtyHeld), from vest date to Dec 31 of CY
     const holdingDays = Math.round((new Date(`${calendarYear}-12-31`) - new Date(lot.vestDate)) / (1000 * 60 * 60 * 24));
@@ -637,9 +656,9 @@ function computeFA3(lots, calendarYear) {
       zip: ENTITY.zip,
       nature: ENTITY.nature,
       dateAcquired: lot.vestDate,
-      qtyVested: reportQty,
-      qtyHeld: lot.qtyHeld,
-      qtyNet: netHeld,
+      qtyVested: lot.qtyVested,    // gross shares released by Shareworks (for display)
+      qtyHeld: lot.qtyHeld,         // Shareworks "Shares Held" column (net of STC)
+      qtyNet: reportQty,            // net shares used for all calculations (= reportQty = netSharesReceived)
       fmvUsd: fmvUsd.toFixed(2),
       vestFxRate: vestFx.rate.toFixed(2),
       vestFxDate: vestFx.date,
@@ -703,9 +722,13 @@ function renderResults(rows, calendarYear) {
   spList.innerHTML = Object.entries(usedStockPrices)
     .map(([k, v]) => `<div>${k}: ${v}</div>`).join('');
 
+  const stcModeLabel = document.getElementById('stcMode')?.value === 'include'
+    ? 'Include STC as sale proceeds (₹0 STCG)'
+    : 'Exclude STC (net shares only)';
   document.getElementById('calcDetails').innerHTML =
     `<strong>Calendar Year:</strong> ${calendarYear} &nbsp;|&nbsp; 
      <strong>Lots disclosed:</strong> ${rows.length} &nbsp;|&nbsp;
+     <strong>STC Treatment:</strong> ${stcModeLabel} &nbsp;|&nbsp;
      <strong>SBI TT rates per:</strong> Rule 115 (vesting date for acquisition; last working day of preceding month for sale/income) &nbsp;|&nbsp;
      <strong>Peak price:</strong> highest daily high in CY${calendarYear}`;
 
@@ -719,6 +742,10 @@ function renderResults(rows, calendarYear) {
 function downloadExcel() {
   const ay = document.getElementById('aySelect').value;
   const calendarYear = parseInt(ay.split('-')[0]) - 1; // CY = AY first year - 1 (e.g. AY 2026-27 → CY 2025)
+  const stcMode = document.getElementById('stcMode').value;
+  const stcModeDesc = stcMode === 'include'
+    ? 'Include STC — STC shown as Gross Sale Proceeds (₹0 STCG; sell price = FMV at vesting)'
+    : 'Exclude STC — STC ignored entirely; net shares only (ClearTax / conservative approach)';
 
   // Sheet 1: ITR Entry (clean)
   const entryData = [
@@ -748,6 +775,7 @@ function downloadExcel() {
   // Sheet 2: Calculation Audit
   const auditData = [
     ['CALCULATION AUDIT TRAIL – FOR CA REVIEW'],
+    ['STC Treatment:', stcModeDesc],
     [],
     ['Sl No', 'Vest Date', 'Qty Vested', 'Net Held', 'FMV (USD)', 'Vest FX Rate',
      'Vest FX Date', 'Initial (₹)', 'Peak Price (USD)', 'Peak Date', 'Peak FX',
@@ -764,13 +792,15 @@ function downloadExcel() {
     [],
     ['─── FORMULA LEGEND ───', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', ''],
     ['Column', 'Formula Used', 'Rule / Source'],
-    ['Initial Investment (₹)', 'Net Held Qty × FMV (USD/share on vest date) × SBI TT Buy Rate on vest date', 'Rule 115 — TTBR on vesting date'],
-    ['Peak Value (₹)', 'Net Held Qty × Highest daily closing price in CY × SBI TT Buy Rate on that peak date', 'ITD document Section 5 — peak during calendar year'],
+    ['Initial Investment (₹)', 'Gross Shares Vested × FMV (USD/share on vest date) × SBI TT Buy Rate on vest date', 'Full perquisite value — matches Form 16 salary income; includes STC shares which funded TDS'],
+    ['Peak Value (₹)', 'Net Shares (vested − STC) × Highest daily closing price in CY × SBI TT Buy Rate on peak date', 'ITD document Section 5 — peak uses net shares; STC shares never truly held'],
     ['Closing Value (₹)', 'Net Held Qty × TEAM closing price on Dec 31 × SBI TT Buy Rate on Dec 31', 'ITD document Section 5 — Dec 31 closing balance'],
     ['Gross Sale Proceeds (₹)', 'Voluntary Sale Qty × Sale Price (USD) × SBI TT Buy Rate on last day of month preceding sale', 'Rule 115(f) — last day of prev month for capital gains'],
     ['Gross Amount Paid/Credited (₹)', '₹0 — Atlassian Corporation does not pay dividends', 'ITD Table A3 field — dividends only'],
-    ['Net Held Qty', 'Shares Held column from Shareworks Award Transactions sheet (after STC deduction)', 'Per CA guidance — STC shares excluded from FA A3'],
-    ['STC (Sell-To-Cover)', 'Ignored entirely — not reported in FA A3', 'Per CA guidance — STC is a tax withholding mechanism, not a voluntary sale'],
+    ['Net Held Qty', 'Shares Held column from Shareworks (after STC deduction) = qtyVested − stcQty. Same in both Include and Exclude modes.', 'STC shares never truly held — peak/initial/closing always on net shares'],
+    ['STC (Sell-To-Cover) — Exclude mode', 'STC ignored entirely — not reported in FA A3', 'Per CA guidance — STC is a tax withholding mechanism, not a voluntary sale'],
+    ['STC (Sell-To-Cover) — Include mode', 'STC shown as Gross Sale Proceeds: stcQty × stcPrice × SBI TT Buy Rate (last day of prev month)', 'STCG = ₹0 since sell price ≈ FMV at vesting; proceeds reported for transparency'],
+    ['Net Shares (both modes)', 'qtyVested − stcQty (shares actually received). Peak/Initial/Closing always use net shares.', 'STC happens simultaneously with vesting — those shares never truly held'],
     ['SBI TT Buy Rate', 'Fetched from github.com/sahilgupta/sbi-fx-ratekeeper daily CSV', 'Rule 115 — TT Buying Rate of SBI (officialforexrates.com source)'],
     ['Peak Date', 'Date of highest TEAM daily closing price during the calendar year', 'Computed from team_prices.json (Alpha Vantage / Yahoo Finance data)'],
     ['Vesting FX Date', 'Actual vesting date (or next working day if market holiday)', 'Rule 115 — rate on the date of vesting'],
@@ -831,10 +861,11 @@ function downloadExcel() {
     [],
     ['FOR ATLASSIAN RSU HOLDERS:'],
     ['Status', 'Owner'],
-    ['Nature of Amount', 'No Amount paid/credited  (Atlassian pays no dividends; STC not reported in A2 per CA guidance)'],
+    ['Nature of Amount', stcMode === 'include' ? 'Proceeds from sale or redemption of financial assets  (STC proceeds included)' : 'No Amount paid/credited  (Atlassian pays no dividends; STC excluded in Exclude mode)'],
     ['Amount', '0'],
     [],
     ['OTHER NOTES:'],
+    ['STC Treatment Used:', stcModeDesc],
     ['Peak Balance: Auto-computed as sum of peak values of all lots in CY ' + calendarYear + ' (INR)'],
     ['Closing balance: Sum of net shares held x Dec 31 ' + calendarYear + ' price x SBI TT Buy rate'],
     ['The ITR portal requires BOTH Table A2 (custodian) AND Table A3 (shares) - filling only A3 is a common error'],
@@ -890,7 +921,8 @@ async function processFile() {
   usedStockPrices = {};
 
   const ay = document.getElementById('aySelect').value;
-  log('STC treatment: Net shares only — CA confirmed (STC excluded from FA A3)');
+  const stcMode = document.getElementById('stcMode').value;
+  log(`STC treatment: ${stcMode === 'include' ? 'Include — STC shown as sale proceeds (₹0 STCG)' : 'Exclude — STC ignored entirely (net shares only)'}`);
   const calendarYear = parseInt(ay.split('-')[0]) - 1; // CY = AY first year - 1 (e.g. AY 2026-27 → CY 2025)
 
   log(`═══ ITR Schedule FA A3 — AY ${ay} (CY ${calendarYear}) ═══`, 'head');
@@ -919,7 +951,7 @@ async function processFile() {
 
     // Compute FA A3 rows from vesting lots
     log(`Computing FA A3 for CY ${calendarYear}...`, 'head');
-    outputRows = computeFA3(lots, calendarYear);
+    outputRows = computeFA3(lots, calendarYear, stcMode);
 
     // Add voluntary sale rows for shares sold in this CY (non-STC)
     const cySales = voluntarySales.filter(s => {
