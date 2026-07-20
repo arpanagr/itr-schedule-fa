@@ -603,11 +603,14 @@ function computeFA3(lots, calendarYear, stcMode = 'exclude') {
 
     const reportQty = netSharesReceived;
 
-    // Initial value = GROSS vested shares × FMV × vest FX rate
-    // This is the perquisite value — the full taxable income reported in Form 16/salary.
-    // It covers ALL shares released at vesting (including STC shares, which fund the TDS).
+    // Initial value:
+    // INCLUDE mode: GROSS vested shares × FMV × vest FX rate
+    //   This is the full perquisite value — matches Form 16/salary; covers STC shares which fund TDS.
+    // EXCLUDE mode: NET shares (vested − STC) × FMV × vest FX rate
+    //   STC shares are excluded from all calculations; only actually-received shares are reported.
     const grossVestedQty = lot.qtyVested > 0 ? lot.qtyVested : lot.qty;
-    const initialValueInr = grossVestedQty * fmvUsd * vestFx.rate;
+    const initialQty = stcMode === 'exclude' ? reportQty : grossVestedQty;
+    const initialValueInr = initialQty * fmvUsd * vestFx.rate;
 
     // Peak value: net shares × peak price in CY × peak-date FX rate
     // Uses net shares in both modes — STC shares never truly "held", so peak reflects actual holding
@@ -792,7 +795,8 @@ function downloadExcel() {
     [],
     ['─── FORMULA LEGEND ───', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', ''],
     ['Column', 'Formula Used', 'Rule / Source'],
-    ['Initial Investment (₹)', 'Gross Shares Vested × FMV (USD/share on vest date) × SBI TT Buy Rate on vest date', 'Full perquisite value — matches Form 16 salary income; includes STC shares which funded TDS'],
+    ['Initial Investment (₹) — Include mode', 'Gross Shares Vested × FMV (USD/share on vest date) × SBI TT Buy Rate on vest date', 'Full perquisite value — matches Form 16 salary income; includes STC shares which funded TDS'],
+    ['Initial Investment (₹) — Exclude mode', 'Net Shares (vested − STC) × FMV (USD/share on vest date) × SBI TT Buy Rate on vest date', 'STC excluded from all calculations — only actually-received shares are reported'],
     ['Peak Value (₹)', 'Net Shares (vested − STC) × Highest daily closing price in CY × SBI TT Buy Rate on peak date', 'ITD document Section 5 — peak uses net shares; STC shares never truly held'],
     ['Closing Value (₹)', 'Net Held Qty × TEAM closing price on Dec 31 × SBI TT Buy Rate on Dec 31', 'ITD document Section 5 — Dec 31 closing balance'],
     ['Gross Sale Proceeds (₹)', 'Voluntary Sale Qty × Sale Price (USD) × SBI TT Buy Rate on last day of month preceding sale', 'Rule 115(f) — last day of prev month for capital gains'],
