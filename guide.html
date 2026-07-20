@@ -318,25 +318,29 @@
     <p>When RSUs vest, Atlassian automatically sells some shares to cover your Indian tax liability (TDS). This is called <strong>Sell-to-Cover (STC)</strong>. There is no clear consensus on how to treat these in Schedule FA A3, so the tool lets you choose.</p>
 
     <div class="info-box blue">
-      <strong>📌 Key principle (same in both modes):</strong><br>
-      <strong>Initial Value uses <em>gross vested shares</em></strong> (matches Form 16 perquisite value).<br>
-      <strong>Peak &amp; Closing Values use <em>net shares</em></strong> (vested − STC) — shares you actually held.<br>
+      <strong>📌 Key principle:</strong><br>
+      <strong>Peak &amp; Closing Values always use <em>net shares</em></strong> (vested − STC) — shares you actually held.<br>
       The STC happens simultaneously with vesting — those shares are never truly "held" by you in any meaningful sense.<br><br>
+      <strong>Initial Value</strong> differs by mode:<br>
+      &nbsp;&nbsp;• <strong>Include STC:</strong> uses <em>gross vested shares</em> (matches Form 16 perquisite value).<br>
+      &nbsp;&nbsp;• <strong>Exclude STC:</strong> uses <em>net shares</em> (vested − STC) — STC excluded from all calculations.<br><br>
       <strong>Example:</strong> 100 shares vest → 35 sold as STC → you hold <strong>65 shares</strong>.<br>
-      Initial Value = <code>100 × FMV × SBI TT Buy rate on vest date</code> (full perquisite = Form 16 amount).<br>
-      Peak Value = <code>65 × peak stock price × SBI TT Buy rate on peak date</code> — net shares only.
+      <em>Include mode:</em> Initial Value = <code>100 × FMV × SBI TT Buy rate on vest date</code> (full perquisite = Form 16 amount).<br>
+      <em>Exclude mode:</em> Initial Value = <code>65 × FMV × SBI TT Buy rate on vest date</code> (net shares only).<br>
+      Peak Value (both modes) = <code>65 × peak stock price × SBI TT Buy rate on peak date</code>.
     </div>
 
     <h3>Mode 1: Exclude STC (default — ClearTax / conservative approach)</h3>
     <div class="info-box green">
       <strong>What it does:</strong><br>
       <ul style="margin: 8px 0 0 16px;">
-        <li><strong>Initial Value</strong> = gross vested shares × FMV × SBI TT Buy Rate (full perquisite, matches Form 16).</li>
+        <li><strong>Initial Value</strong> = <strong>net shares (vested − STC)</strong> × FMV × SBI TT Buy Rate.</li>
         <li><strong>Peak &amp; Closing Values</strong> = net shares (vested − STC) × price × SBI TT Buy Rate.</li>
         <li>STC sale is <strong>not shown</strong> in "Gross Sale Proceeds" — ₹0.</li>
+        <li>STC is excluded from <em>all</em> calculations — only shares you actually received are reported.</li>
       </ul>
       <br>
-      <strong>Example:</strong> 100 vested, 35 STC → <strong>65 net shares</strong> reported. Sale proceeds = ₹0.<br>
+      <strong>Example:</strong> 100 vested, 35 STC → <strong>65 net shares</strong> used for initial, peak &amp; closing. Sale proceeds = ₹0.<br>
       <em>The STC is accounted for in your Form 16 as TDS on the perquisite value.</em>
     </div>
 
@@ -364,8 +368,8 @@
       </tr>
       <tr>
         <td>Initial Value shares</td>
-        <td>✅ Gross vested (matches Form 16)</td>
-        <td>✅ Gross vested (matches Form 16)</td>
+        <td>✅ Net (vested − STC) — STC excluded from all calculations</td>
+        <td>✅ Gross vested (matches Form 16 perquisite)</td>
       </tr>
       <tr>
         <td>Peak &amp; Closing Value shares</td>
