@@ -321,18 +321,23 @@
       <strong>📌 Key principle:</strong><br>
       <strong>Peak &amp; Closing Values always use <em>net shares</em></strong> (vested − STC) — shares you actually held.<br>
       The STC happens simultaneously with vesting — those shares are never truly "held" by you in any meaningful sense.<br><br>
-      <strong>Initial Value</strong> differs by mode:<br>
-      &nbsp;&nbsp;• <strong>Include STC:</strong> uses <em>gross vested shares</em> (matches Form 16 perquisite value).<br>
-      &nbsp;&nbsp;• <strong>Exclude STC:</strong> uses <em>net shares</em> (vested − STC) — STC excluded from all calculations.<br><br>
+      <strong>Initial Value</strong> differs by mode and year:<br>
+      &nbsp;&nbsp;• <strong>Prior-year lot (any mode):</strong> uses <em>net shares</em> (vested − STC) — STC happened in the vesting year and does not affect the current year's reporting.<br>
+      &nbsp;&nbsp;• <strong>Current-year lot, Include STC:</strong> uses <em>gross vested shares</em> (matches Form 16 perquisite value).<br>
+      &nbsp;&nbsp;• <strong>Current-year lot, Exclude STC:</strong> uses <em>net shares</em> (vested − STC) — STC excluded from all calculations.<br><br>
+      <strong>STC sale proceeds</strong> are only shown for <strong>current-year lots in Include mode</strong>.<br>
+      For prior-year lots, STC already occurred in the vesting year — it is never shown again in a later year's Schedule FA.<br>
+      (Source: ClearTax, TaxGuru, CAClubIndia 2025-26)<br><br>
       <strong>Example:</strong> 100 shares vest → 35 sold as STC → you hold <strong>65 shares</strong>.<br>
-      <em>Include mode:</em> Initial Value = <code>100 × FMV × SBI TT Buy rate on vest date</code> (full perquisite = Form 16 amount).<br>
-      <em>Exclude mode:</em> Initial Value = <code>65 × FMV × SBI TT Buy rate on vest date</code> (net shares only).<br>
-      Peak Value (both modes) = <code>65 × peak stock price × SBI TT Buy rate on peak date</code>.
+      <em>Prior-year lot (any mode):</em> Initial Value = <code>65 × FMV × SBI TT Buy rate on vest date</code>. STC proceeds = ₹0.<br>
+      <em>Current-year, Include mode:</em> Initial Value = <code>100 × FMV × SBI TT Buy rate on vest date</code> (full Form 16 amount). STC proceeds shown.<br>
+      <em>Current-year, Exclude mode:</em> Initial Value = <code>65 × FMV × SBI TT Buy rate on vest date</code>. STC proceeds = ₹0.<br>
+      Peak Value (all cases) = <code>65 × peak stock price × SBI TT Buy rate on peak date</code>.
     </div>
 
     <h3>Mode 1: Exclude STC (default — ClearTax / conservative approach)</h3>
     <div class="info-box green">
-      <strong>What it does:</strong><br>
+      <strong>What it does (for current-year vesting lots):</strong><br>
       <ul style="margin: 8px 0 0 16px;">
         <li><strong>Initial Value</strong> = <strong>net shares (vested − STC)</strong> × FMV × SBI TT Buy Rate.</li>
         <li><strong>Peak &amp; Closing Values</strong> = net shares (vested − STC) × price × SBI TT Buy Rate.</li>
@@ -340,13 +345,19 @@
         <li>STC is excluded from <em>all</em> calculations — only shares you actually received are reported.</li>
       </ul>
       <br>
-      <strong>Example:</strong> 100 vested, 35 STC → <strong>65 net shares</strong> used for initial, peak &amp; closing. Sale proceeds = ₹0.<br>
+      <strong>For prior-year vesting lots (automatically applied in both modes):</strong><br>
+      <ul style="margin: 8px 0 0 16px;">
+        <li>All values use <strong>net shares</strong> — STC shares no longer exist (sold at the time of vesting).</li>
+        <li>STC proceeds are <strong>never</strong> shown — the STC transaction occurred in the vesting year, not the current reporting year.</li>
+      </ul>
+      <br>
+      <strong>Example (current-year lot):</strong> 100 vested, 35 STC → <strong>65 net shares</strong> used for initial, peak &amp; closing. Sale proceeds = ₹0.<br>
       <em>The STC is accounted for in your Form 16 as TDS on the perquisite value.</em>
     </div>
 
     <h3>Mode 2: Include STC (shows STC as sale proceeds)</h3>
     <div class="info-box yellow">
-      <strong>What it does:</strong><br>
+      <strong>What it does (for current-year vesting lots only):</strong><br>
       <ul style="margin: 8px 0 0 16px;">
         <li><strong>Initial Value</strong> = gross vested shares × FMV × SBI TT Buy Rate (full perquisite, matches Form 16).</li>
         <li><strong>Peak &amp; Closing Values</strong> = net shares (vested − STC) × price × SBI TT Buy Rate.</li>
@@ -355,8 +366,15 @@
         <li>Short-Term Capital Gain on STC = <strong>₹0</strong>, because the sell price equals the FMV at vesting (simultaneous transaction).</li>
       </ul>
       <br>
-      <strong>Example:</strong> 100 vested, 35 STC at $185/share → 65 net shares for peak/initial/closing.<br>
-      Sale proceeds = <code>35 × $185 × SBI TT Buy Rate</code> shown in the "Gross Sale Proceeds" column.
+      <strong>For prior-year vesting lots (automatically applied regardless of mode):</strong><br>
+      <ul style="margin: 8px 0 0 16px;">
+        <li><strong>Initial Value</strong> = <strong>net shares</strong> × FMV × SBI TT Buy Rate (STC not included — it happened in a prior year).</li>
+        <li>STC proceeds = <strong>₹0</strong> — STC occurred in the vesting year and must not be re-reported in a later year.</li>
+      </ul>
+      <br>
+      <strong>Example (current-year lot):</strong> 100 vested, 35 STC at $185/share → 65 net shares for peak/initial/closing.<br>
+      Sale proceeds = <code>35 × $185 × SBI TT Buy Rate</code> shown in the "Gross Sale Proceeds" column.<br>
+      <strong>Example (prior-year lot):</strong> 100 vested in CY2023, 35 STC → reporting in CY2025: Initial Value = <code>65 × FMV × rate</code>. STC proceeds = ₹0.
     </div>
 
     <h3>Which mode should I use?</h3>
@@ -367,9 +385,14 @@
         <th>Include STC</th>
       </tr>
       <tr>
-        <td>Initial Value shares</td>
+        <td>Initial Value shares — current-year lot</td>
         <td>✅ Net (vested − STC) — STC excluded from all calculations</td>
         <td>✅ Gross vested (matches Form 16 perquisite)</td>
+      </tr>
+      <tr>
+        <td>Initial Value shares — prior-year lot</td>
+        <td>✅ Net (vested − STC) — automatic, regardless of mode</td>
+        <td>✅ Net (vested − STC) — automatic, regardless of mode</td>
       </tr>
       <tr>
         <td>Peak &amp; Closing Value shares</td>
@@ -377,9 +400,14 @@
         <td>✅ Net (vested − STC)</td>
       </tr>
       <tr>
-        <td>STC shown as sale proceeds</td>
+        <td>STC shown as sale proceeds — current-year lot</td>
         <td>❌ No (₹0)</td>
         <td>✅ Yes (stcQty × stcPrice × FX rate)</td>
+      </tr>
+      <tr>
+        <td>STC shown as sale proceeds — prior-year lot</td>
+        <td>❌ No (₹0) — STC occurred in vesting year</td>
+        <td>❌ No (₹0) — STC occurred in vesting year</td>
       </tr>
       <tr>
         <td>Short-term capital gain on STC</td>
