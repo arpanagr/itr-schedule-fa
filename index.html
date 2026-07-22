@@ -839,7 +839,7 @@ function downloadExcel() {
     ['Initial Investment (₹) — Exclude mode (current-year lot)', 'Net Shares (vested − STC) × FMV (USD/share on vest date) × SBI TT Buy Rate on vest date', 'STC excluded from all calculations — only actually-received shares are reported'],
     ['Initial Investment (₹) — Prior-year lot (any mode)', 'Net Shares (vested − STC) × FMV (USD/share on vest date) × SBI TT Buy Rate on vest date', 'STC happened in the vesting year — not relevant to current reporting year. Net shares only (ClearTax, TaxGuru, CAClubIndia 2025-26)'],
     ['Peak Value (₹)', 'MAX(Net Shares × Highest daily close from vest date to Dec 31 × SBI TT Buy Rate, Initial Value)', 'Peak searched from vest date onwards (shares did not exist before). MAX with initial value handles FX appreciation or gross→net share drop in Include mode.'],
-    ['Peak Date', 'Date of highest daily close from vest date to Dec 31 of CY', 'Not the year's overall peak — only dates on/after the lot vest date are eligible'],
+    ['Peak Date', 'Date of highest daily close from vest date to Dec 31 of CY', 'Not the year overall peak — only dates on/after the lot vest date are eligible'],
     ['Closing Value (₹)', 'Net Held Qty × TEAM closing price on Dec 31 × SBI TT Buy Rate on Dec 31', 'ITD document Section 5 — Dec 31 closing balance'],
     ['Gross Sale Proceeds (₹)', 'Voluntary Sale Qty × Sale Price (USD) × SBI TT Buy Rate on last day of month preceding sale', 'Rule 115(f) — last day of prev month for capital gains'],
     ['Gross Amount Paid/Credited (₹)', '₹0 — Atlassian Corporation does not pay dividends', 'ITD Table A3 field — dividends only'],
