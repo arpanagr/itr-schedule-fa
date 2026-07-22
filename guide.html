@@ -323,6 +323,18 @@
 
     <h3>Sheet 2: Table_A2_Custodian</h3>
     <p>Details for <strong>Table A2</strong> (foreign custodial/brokerage account). Auto-computed portfolio values. You will need to manually enter your Shareworks account number and account opening date.</p>
+    <div class="info-box blue" style="margin-top:8px;">
+      <strong>📌 A2 Peak Balance — how it's computed:</strong><br>
+      The peak balance is the <strong>highest total portfolio value on any single trading day</strong> during the calendar year — not the sum of individual lot peaks (which could occur on different days).<br><br>
+      For each trading day, the tool computes:<br>
+      <code>Total = Σ (sharesHeldOnDay × stockClose × SBI TT Buy Rate)</code><br><br>
+      Rules applied per lot:
+      <ul style="margin:6px 0 0 16px;">
+        <li>Lot counted <strong>only from its vest date</strong> — shares didn't exist before vesting</li>
+        <li>Lots sold voluntarily are <strong>excluded after their sale date</strong></li>
+        <li>Peak = MAX(highest daily total, initial portfolio value)</li>
+      </ul>
+    </div>
 
     <h3>Sheet 3: Calculation_Audit</h3>
     <p>Full audit trail showing every calculation step — FX rates used, stock prices, dates, and a formula legend at the bottom. Share this with your CA for verification.</p>

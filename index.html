@@ -858,11 +858,78 @@ function downloadExcel() {
 
   // Compute Table A2 aggregate values from A3 output rows
   const totalInitialInr    = outputRows.reduce((s, r) => s + (r.initialValueInr  || 0), 0);
-  const totalPeakInr       = outputRows.reduce((s, r) => s + (r.peakValueInr     || 0), 0);
   const totalClosingInr    = outputRows.reduce((s, r) => s + (r.closingValueInr  || 0), 0);
   const totalSaleProcInr   = outputRows.reduce((s, r) => s + (r.saleProceedsInr  || 0), 0);
   const totalInitialUsd    = outputRows.reduce((s, r) => s + ((r.qtyVested || 0) * (r.fmvUsd || 0)), 0);
   const totalClosingUsd    = outputRows.reduce((s, r) => s + ((r.qtyNet   || 0) * (r.dec31Price || 0)), 0);
+
+  // ── A2 Peak Balance: max total portfolio value on any single trading day ──
+  // Correct approach: for each trading day, compute sum of (sharesHeldOnDay × price),
+  // then convert the USD peak to INR using the FX rate on that peak date.
+  //
+  // "Shares held on day D" for each lot:
+  //   - 0 if D < vestDate (shares didn't exist yet)
+  //   - 0 if lot was voluntarily sold before D (closingValueInr = 0 and isVoluntarySale)
+  //   - reportQty (net shares) otherwise
+  //
+  // Voluntary sale rows: shares existed from acqDate to saleDate — included up to saleDate.
+  //
+  // We compute daily portfolio USD totals, find the peak USD day, then convert to INR.
+  // This avoids 250+ separate FX lookups while being accurate.
+
+  let totalPeakInr = totalInitialInr; // fallback: at minimum, peak ≥ initial (first day of holding)
+
+  const yd = teamPrices[calendarYear];
+  if (yd && yd.daily_close && Object.keys(yd.daily_close).length > 0) {
+    const dailyClose = yd.daily_close;
+    const tradingDays = Object.keys(dailyClose).sort();
+
+    // Build lot holding info: { vestDate, qty, soldDate (or null) }
+    const lotHoldings = outputRows
+      .filter(r => !r.isVoluntarySale)
+      .map(r => ({
+        vestDate: r.vestDate,
+        qty: r.qtyNet || 0,
+        soldDate: (r.closingValueInr === 0 && r.saleProceedsInr > 0) ? r.saleDate : null
+      }));
+
+    // Also include voluntary sale rows: held from vestDate to saleDate
+    const saleLotHoldings = outputRows
+      .filter(r => r.isVoluntarySale)
+      .map(r => ({
+        vestDate: r.vestDate,
+        qty: r.qtyNet || r.saleQty || 0,
+        soldDate: r.saleDate   // sold during CY
+      }));
+
+    const allHoldings = [...lotHoldings, ...saleLotHoldings];
+
+    let peakUsd = 0;
+    let peakDay = null;
+
+    for (const day of tradingDays) {
+      const price = dailyClose[day];
+      if (!price) continue;
+      let dayTotal = 0;
+      for (const h of allHoldings) {
+        if (!h.vestDate || day < h.vestDate) continue;       // not yet vested
+        if (h.soldDate && day > h.soldDate) continue;        // already sold
+        dayTotal += h.qty * price;
+      }
+      if (dayTotal > peakUsd) { peakUsd = dayTotal; peakDay = day; }
+    }
+
+    if (peakDay && peakUsd > 0) {
+      const peakFxForA2 = getFxRate(peakDay, 'vesting');
+      const computedPeakInr = Math.round(peakUsd * peakFxForA2.rate);
+      totalPeakInr = Math.max(computedPeakInr, totalInitialInr);
+      log(`A2 Peak: $${peakUsd.toFixed(0)} on ${peakDay} × ₹${peakFxForA2.rate} = ₹${totalPeakInr.toLocaleString('en-IN')}`);
+    }
+  } else {
+    // Fallback when daily data unavailable: sum of individual lot peaks (old behaviour)
+    totalPeakInr = outputRows.reduce((s, r) => s + (r.peakValueInr || 0), 0);
+    log('A2 Peak: using sum of lot peaks (daily data unavailable)', 'warn');
+  }
 
   // Sheet 3: Table A2 — Foreign Custodian Account (per ITD official document)
   const a2Data = [
@@ -913,7 +980,8 @@ function downloadExcel() {
     [],
     ['OTHER NOTES:'],
     ['STC Treatment Used:', stcModeDesc],
-    ['Peak Balance: Auto-computed as sum of peak values of all lots in CY ' + calendarYear + ' (INR)'],
+    ['Peak Balance: Max total portfolio value on any single trading day in CY ' + calendarYear + ' (shares held × daily close × SBI TT Buy Rate on that day)'],
+    ['  Note: Each lot counted only from its vest date; sold lots excluded after their sale date'],
     ['Closing balance: Sum of net shares held x Dec 31 ' + calendarYear + ' price x SBI TT Buy rate'],
     ['The ITR portal requires BOTH Table A2 (custodian) AND Table A3 (shares) - filling only A3 is a common error'],
   ];
