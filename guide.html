@@ -160,11 +160,21 @@
             <li>Click on <strong>Activity</strong> in the top navigation menu</li>
             <li>Select <strong>Reports</strong> from the dropdown</li>
             <li>Click on <strong>Account Report</strong></li>
-            <li>Click <strong>Download</strong> or <strong>Export</strong> to save as <code>.xlsx</code></li>
+            <li>Set the report options as follows:
+              <ul style="margin-top:6px;">
+                <li><strong>Reporting Period:</strong> All Available History</li>
+                <li><strong>Display Currency:</strong> Minimal Currency Conversion</li>
+                <li><strong>Output Format:</strong> xlsx</li>
+                <li><strong>Currency As at Date:</strong> Leave as default</li>
+              </ul>
+            </li>
+            <li>Click <strong>Download</strong> or <strong>Export</strong> to save the <code>.xlsx</code> file</li>
           </ol>
           <p>The downloaded file will contain multiple sheets. The tool uses the <strong>"Award Transactions"</strong> sheet which has your complete RSU vesting history including vesting dates, shares vested, shares held, FMV per share, and sell-to-cover details.</p>
           <div style="background:#e8f4fd;border-left:4px solid #2196F3;padding:10px;margin-top:8px;border-radius:4px;">
-            💡 <strong>Tip:</strong> Make sure you download the full report (not just a partial view). The file should have sheets named: <em>Award Information, Award Transactions, Sales, Share Holdings, Employee ID &amp; Name, Quote History</em>.
+            💡 <strong>Tip:</strong> Make sure you download the full report (not just a partial view). The file should have sheets named: <em>Award Information, Award Transactions, Sales, Share Holdings, Employee ID &amp; Name, Quote History</em>.<br><br>
+            ⚠️ <strong>Important:</strong> Selecting <strong>"All Available History"</strong> ensures all prior-year vesting lots are included — these must be reported in Schedule FA even if they vested years ago.
+            Selecting <strong>"Minimal Currency Conversion"</strong> ensures the tool receives raw USD values (FMV, STC price) without Shareworks applying its own FX conversion.
           </div>
         </div>
       </li>
@@ -190,7 +200,15 @@
       <li>
         <div class="step-content">
           <h4>Download your Shareworks Account Report</h4>
-          <p>Log in to Shareworks → Click <strong>Activity</strong> → Select <strong>Reports</strong> → Click <strong>Account Report</strong> → Download as Excel (.xlsx). Make sure the report includes all historical vestings (from inception).</p>
+          <p>Log in to Shareworks → Click <strong>Activity</strong> → Select <strong>Reports</strong> → Click <strong>Account Report</strong>.</p>
+          <p>Use these exact settings:</p>
+          <ul style="margin:6px 0 6px 20px;">
+            <li><strong>Reporting Period:</strong> All Available History</li>
+            <li><strong>Display Currency:</strong> Minimal Currency Conversion</li>
+            <li><strong>Output Format:</strong> xlsx</li>
+            <li><strong>Currency As at Date:</strong> Leave as default</li>
+          </ul>
+          <p>Then click <strong>Download / Export</strong> to save the file.</p>
         </div>
       </li>
       <li>
@@ -332,7 +350,9 @@
       <em>Prior-year lot (any mode):</em> Initial Value = <code>65 × FMV × SBI TT Buy rate on vest date</code>. STC proceeds = ₹0.<br>
       <em>Current-year, Include mode:</em> Initial Value = <code>100 × FMV × SBI TT Buy rate on vest date</code> (full Form 16 amount). STC proceeds shown.<br>
       <em>Current-year, Exclude mode:</em> Initial Value = <code>65 × FMV × SBI TT Buy rate on vest date</code>. STC proceeds = ₹0.<br>
-      Peak Value (all cases) = <code>65 × peak stock price × SBI TT Buy rate on peak date</code>.
+      Peak Value (all cases) = <code>MAX(65 × peak stock price (from vest date) × SBI TT Buy rate, Initial Value)</code>.<br>
+      Peak is searched <em>from the vest date onwards</em> — shares didn't exist before vesting, so earlier dates don't count.<br>
+      The MAX with initial value handles cases where stock/FX moves mean the naïve peak would be lower than the initial investment.
     </div>
 
     <h3>Mode 1: Exclude STC (default — ClearTax / conservative approach)</h3>
@@ -427,6 +447,61 @@
   </section>
 
   <!-- Section 8: AY vs CY -->
+  <!-- Peak Value Rules -->
+  <section id="peak-value">
+    <h2>📈 Peak Value Calculation Rules</h2>
+
+    <div class="info-box blue">
+      <strong>📌 Two key rules for peak value:</strong><br><br>
+      <strong>Rule 1 — Peak is searched from vest date onwards, not from Jan 1.</strong><br>
+      Shares don't exist in your account before the vesting date. A lot that vested in November 2025
+      cannot have a peak price from February 2025 — those shares weren't held yet.<br>
+      The tool uses daily closing prices from the vest date through December 31 of the calendar year.<br><br>
+      <strong>Rule 2 — Peak Value = MAX(Net Shares × Peak Price × FX rate, Initial Value).</strong><br>
+      If the stock price (adjusted for USD/INR FX) never exceeded the FMV at vesting, the initial
+      investment value is itself the peak. This can happen when:<br>
+      &nbsp;&nbsp;• The stock price didn't rise enough to offset a rupee appreciation (stronger INR = lower INR value for same USD price).<br>
+      &nbsp;&nbsp;• In Include STC mode: initial value uses gross shares but peak uses net shares — the share count drop can make naïve peak &lt; initial even if price rose.<br>
+    </div>
+
+    <h3>Formula</h3>
+    <pre style="background:#f5f5f5;padding:12px;border-radius:6px;font-size:13px;overflow-x:auto;">Peak Value (₹) = MAX(
+  netShares × peakPrice(from vestDate to Dec31) × SBI_TT_BuyRate(peakDate),
+  initialValueInr
+)</pre>
+
+    <h3>Examples</h3>
+    <table>
+      <thead><tr><th>Scenario</th><th>Initial Value</th><th>Naïve Peak</th><th>Final Peak Value</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>Stock rose, FX neutral<br><small>100 gross→70 net, $10→$12, FX stable ₹84</small></td>
+          <td>100×$10×₹84 = <strong>₹84,000</strong></td>
+          <td>70×$12×₹84 = ₹70,560</td>
+          <td><strong>₹84,000</strong> (MAX wins — initial)</td>
+        </tr>
+        <tr>
+          <td>Stock rose significantly, FX neutral<br><small>70 net, $10→$15, FX stable ₹84</small></td>
+          <td>70×$10×₹84 = <strong>₹58,800</strong></td>
+          <td>70×$15×₹84 = ₹88,200</td>
+          <td><strong>₹88,200</strong> (naïve peak wins)</td>
+        </tr>
+        <tr>
+          <td>Stock rose but INR appreciated<br><small>70 net, $10→$12, ₹87→₹83</small></td>
+          <td>70×$10×₹87 = <strong>₹60,900</strong></td>
+          <td>70×$12×₹83 = ₹69,720</td>
+          <td><strong>₹69,720</strong> (naïve peak wins)</td>
+        </tr>
+        <tr>
+          <td>Stock flat, INR appreciated<br><small>70 net, $10→$10, ₹87→₹83</small></td>
+          <td>70×$10×₹87 = <strong>₹60,900</strong></td>
+          <td>70×$10×₹83 = ₹58,100</td>
+          <td><strong>₹60,900</strong> (MAX wins — initial)</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
   <section id="ay-cy">
     <h2>📅 8. Assessment Year vs Calendar Year</h2>
     <p>This is the most common source of confusion. Schedule FA uses the <strong>Calendar Year</strong>, not the Indian Financial Year:</p>

@@ -343,6 +343,23 @@ function getStockPrice(dateStr, type = 'close') {
     usedStockPrices[`CY${year} peak`] = `$${yd.peak_price} on ${yd.peak_date}`;
     return { price: yd.peak_price, date: yd.peak_date };
   }
+  // Peak from a specific date onwards (for lots vested mid-year)
+  // Finds the highest daily close from dateStr to end of year using daily_close data
+  if (type === 'peak-from') {
+    const daily = yd.daily_close || {};
+    const keys = Object.keys(daily).sort().filter(k => k >= dateStr);
+    if (keys.length === 0) {
+      // Fallback: use year peak
+      usedStockPrices[`CY${year} peak from ${dateStr}`] = `$${yd.peak_price} on ${yd.peak_date} (fallback)`;
+      return { price: yd.peak_price, date: yd.peak_date };
+    }
+    let peakPrice = 0, peakDate = null;
+    for (const k of keys) {
+      if (daily[k] > peakPrice) { peakPrice = daily[k]; peakDate = k; }
+    }
+    usedStockPrices[`CY${year} peak from ${dateStr}`] = `$${peakPrice} on ${peakDate}`;
+    return { price: peakPrice, date: peakDate };
+  }
   if (type === 'dec31') {
     usedStockPrices[`CY${year} Dec31`] = `$${yd.dec31_close} on ${yd.dec31_date}`;
     return { price: yd.dec31_close, date: yd.dec31_date };
@@ -620,12 +637,22 @@ function computeFA3(lots, calendarYear, stcMode = 'exclude') {
     const initialQty = (isPriorYear || stcMode === 'exclude') ? reportQty : grossVestedQty;
     const initialValueInr = initialQty * fmvUsd * vestFx.rate;
 
-    // Peak value: net shares × peak price in CY × peak-date FX rate
-    // Uses net shares in both modes — STC shares never truly "held", so peak reflects actual holding
+    // Peak value: net shares × peak price (from vest date onwards) × peak-date FX rate
+    // Uses net shares in both modes — STC shares never truly "held", so peak reflects actual holding.
+    //
+    // Key rules:
+    // 1. Peak is searched FROM the vest date (not Jan 1), because shares didn't exist before vesting.
+    //    E.g. a Nov 2025 vest cannot have Feb 2025 as its peak date.
+    // 2. Peak value = MAX(net × peakPrice × peakFX, initialValue)
+    //    Because if stock price never exceeded FMV on vest date (accounting for FX), the initial
+    //    investment value IS the peak. Also handles include-mode where gross→net share drop can
+    //    make naïve peak lower than initial even if price rose.
     const qtyAtPeak = reportQty;
-    const peakStock = getStockPrice(`${calendarYear}-01-01`, 'peak');
+    const peakStock = getStockPrice(lot.vestDate, 'peak-from');
     const peakFx    = getFxRate(peakStock.date || `${calendarYear}-12-31`, 'vesting');
-    const peakValueInr = peakStock.price ? qtyAtPeak * peakStock.price * peakFx.rate : 0;
+    const rawPeakInr = peakStock.price ? qtyAtPeak * peakStock.price * peakFx.rate : 0;
+    const peakValueInr = Math.max(rawPeakInr, initialValueInr);
+    const peakIsInitial = peakValueInr === initialValueInr && rawPeakInr < initialValueInr;
 
     // Closing value (Dec 31 or last trading day of CY)
     const dec31Stock = getStockPrice(`${calendarYear}-12-31`, 'dec31');
@@ -679,9 +706,10 @@ function computeFA3(lots, calendarYear, stcMode = 'exclude') {
       vestFxDate: vestFx.date,
       initialValueInr: Math.round(initialValueInr),
       peakPrice: peakStock.price,
-      peakDate: peakStock.date,
-      peakFxRate: peakFx.rate.toFixed(2),
+      peakDate: peakIsInitial ? lot.vestDate : peakStock.date,
+      peakFxRate: peakIsInitial ? vestFx.rate.toFixed(2) : peakFx.rate.toFixed(2),
       peakValueInr: Math.round(peakValueInr),
+      peakIsInitial,
       dec31Price: dec31Stock.price,
       dec31FxRate: dec31Fx.rate.toFixed(2),
       closingValueInr: Math.round(closingValueInr),
@@ -810,7 +838,8 @@ function downloadExcel() {
     ['Initial Investment (₹) — Include mode (current-year lot)', 'Gross Shares Vested × FMV (USD/share on vest date) × SBI TT Buy Rate on vest date', 'Full perquisite value — matches Form 16 salary income; includes STC shares which funded TDS'],
     ['Initial Investment (₹) — Exclude mode (current-year lot)', 'Net Shares (vested − STC) × FMV (USD/share on vest date) × SBI TT Buy Rate on vest date', 'STC excluded from all calculations — only actually-received shares are reported'],
     ['Initial Investment (₹) — Prior-year lot (any mode)', 'Net Shares (vested − STC) × FMV (USD/share on vest date) × SBI TT Buy Rate on vest date', 'STC happened in the vesting year — not relevant to current reporting year. Net shares only (ClearTax, TaxGuru, CAClubIndia 2025-26)'],
-    ['Peak Value (₹)', 'Net Shares (vested − STC) × Highest daily closing price in CY × SBI TT Buy Rate on peak date', 'ITD document Section 5 — peak uses net shares; STC shares never truly held'],
+    ['Peak Value (₹)', 'MAX(Net Shares × Highest daily close from vest date to Dec 31 × SBI TT Buy Rate, Initial Value)', 'Peak searched from vest date onwards (shares did not exist before). MAX with initial value handles FX appreciation or gross→net share drop in Include mode.'],
+    ['Peak Date', 'Date of highest daily close from vest date to Dec 31 of CY', 'Not the year's overall peak — only dates on/after the lot vest date are eligible'],
     ['Closing Value (₹)', 'Net Held Qty × TEAM closing price on Dec 31 × SBI TT Buy Rate on Dec 31', 'ITD document Section 5 — Dec 31 closing balance'],
     ['Gross Sale Proceeds (₹)', 'Voluntary Sale Qty × Sale Price (USD) × SBI TT Buy Rate on last day of month preceding sale', 'Rule 115(f) — last day of prev month for capital gains'],
     ['Gross Amount Paid/Credited (₹)', '₹0 — Atlassian Corporation does not pay dividends', 'ITD Table A3 field — dividends only'],
@@ -820,7 +849,7 @@ function downloadExcel() {
     ['STC (Sell-To-Cover) — Prior-year lot (any mode)', 'STC NOT shown as sale proceeds — STC happened in the year of vesting, not in current reporting year', 'Confirmed: ClearTax, TaxGuru, CAClubIndia (2025-26) — STC proceeds belong to the year they occurred'],
     ['Net Shares (both modes)', 'qtyVested − stcQty (shares actually received). Peak/Initial/Closing always use net shares.', 'STC happens simultaneously with vesting — those shares never truly held'],
     ['SBI TT Buy Rate', 'Fetched from github.com/sahilgupta/sbi-fx-ratekeeper daily CSV', 'Rule 115 — TT Buying Rate of SBI (officialforexrates.com source)'],
-    ['Peak Date', 'Date of highest TEAM daily closing price during the calendar year', 'Computed from team_prices.json (Alpha Vantage / Yahoo Finance data)'],
+
     ['Vesting FX Date', 'Actual vesting date (or next working day if market holiday)', 'Rule 115 — rate on the date of vesting'],
     ['Sale FX Date', 'Last working day of month preceding the sale month', 'Rule 115(f) — specified date for capital gains'],
     [],
